@@ -1,0 +1,32 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage.*
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Streamlit run data & logs
+.streamlit/secrets.toml
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Output dumps and local test exports
+*.csv.tmp
+*.log
