@@ -148,6 +148,7 @@ class SearchResult:
     success: bool = False
     heuristic_used: Optional[str] = None
     notes: str = ""
+    explored_nodes: list[str] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -172,4 +173,5 @@ class SearchResult:
             "execution_time_ms": self.execution_time_ms,
             "heuristic_used": self.heuristic_used or "none",
             "notes": self.notes,
+            "explored_nodes": self.explored_nodes,
         }

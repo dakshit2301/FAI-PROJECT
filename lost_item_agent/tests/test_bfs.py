@@ -191,6 +191,8 @@ class TestBFSMetrics:
     def test_nodes_expanded_positive(self, line_graph: CampusGraph):
         result = bfs(line_graph, "A", "D")
         assert result.nodes_expanded > 0
+        assert result.explored_nodes[0] == "A"
+        assert len(result.explored_nodes) == result.nodes_expanded
 
     def test_nodes_generated_gte_expanded(self, line_graph: CampusGraph):
         result = bfs(line_graph, "A", "D")

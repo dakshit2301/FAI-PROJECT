@@ -94,6 +94,7 @@ def bfs(
             nodes_generated=1,
             execution_time_ms=elapsed,
             success=True,
+            explored_nodes=[start],
         )
 
     # ---- BFS ----------------------------------------------------------------
@@ -103,10 +104,12 @@ def bfs(
 
     nodes_expanded = 0
     nodes_generated = 1  # start node counted as generated
+    explored_nodes: list[str] = []
 
     while frontier:
         current = frontier.popleft()
         nodes_expanded += 1
+        explored_nodes.append(current)
 
         for neighbor, weight in _get_neighbors(graph, current):
             if neighbor == goal:
@@ -122,6 +125,7 @@ def bfs(
                     nodes_generated=nodes_generated + 1,
                     execution_time_ms=elapsed,
                     success=True,
+                    explored_nodes=explored_nodes,
                 )
 
             if neighbor not in came_from:
@@ -141,6 +145,7 @@ def bfs(
         nodes_generated=nodes_generated,
         execution_time_ms=elapsed,
         notes="Goal is unreachable from start.",
+        explored_nodes=explored_nodes,
     )
 
 

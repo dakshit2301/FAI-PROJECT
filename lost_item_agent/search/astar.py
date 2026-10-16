@@ -112,6 +112,7 @@ def astar(
             execution_time_ms=elapsed,
             success=True,
             heuristic_used=_heuristic_name(heuristic),
+            explored_nodes=[start],
         )
 
     # ---- A* -----------------------------------------------------------------
@@ -133,6 +134,7 @@ def astar(
 
     nodes_expanded = 0
     nodes_generated = 1  # start node
+    explored_nodes: list[str] = []
 
     while heap:
         f_val, _, g_val, current = heapq.heappop(heap)
@@ -142,6 +144,7 @@ def astar(
             continue
 
         nodes_expanded += 1
+        explored_nodes.append(current)
 
         # ---- goal test (on expansion, not generation) ----------------------
         if current == goal:
@@ -158,6 +161,7 @@ def astar(
                 execution_time_ms=elapsed,
                 success=True,
                 heuristic_used=_heuristic_name(heuristic),
+                explored_nodes=explored_nodes,
             )
 
         for neighbor, weight in _get_neighbors(graph, current):
@@ -185,6 +189,7 @@ def astar(
         execution_time_ms=elapsed,
         heuristic_used=_heuristic_name(heuristic),
         notes="Goal is unreachable from start.",
+        explored_nodes=explored_nodes,
     )
 
 

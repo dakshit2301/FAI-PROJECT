@@ -11,7 +11,7 @@ A Foundation of AI project that models searching for a misplaced item as pathfin
 - Search inputs keep the last-seen location separate from the user's current position. User-entered visited places are added to the candidate search list and highlighted on the map.
 - Candidate ranking uses `(path cost + room search effort) × (1 - user belief)`. Beliefs are user-supplied, not learned.
 - A simulated mission that checks candidate locations in the recommended order and recomputes the route from the last reached location after each unsuccessful inspection. The selected “actual item location” is simulation input, not a sensor or a real recovered object.
-- A Streamlit dashboard with a guided campus-search workspace, proposal-coverage checklist, grid playground, algorithm comparison, benchmark charts/exports, and methodology.
+- A Streamlit dashboard with a campus-search workspace, grid playground, algorithm comparison, benchmark charts/exports, and methodology.
 - Reproducible map and start/goal generation for benchmark scenarios. Runtime measurements are real and can vary between runs.
 
 ## Technology
@@ -25,11 +25,9 @@ A Foundation of AI project that models searching for a misplaced item as pathfin
 
 Install exact/current compatible versions through `requirements.txt`; dependencies are version-ranged rather than fully locked.
 
-## Interface design
+## Interface
 
-The dashboard uses a light, warm-neutral canvas with forest-green accents, rounded panels, and responsive spacing. Headings use Manrope, body text uses DM Sans, and code/metric values use DM Mono when Google Fonts is reachable; system-font fallbacks are included. The theme is configured in `.streamlit/config.toml` and is applied when launching from the workspace root.
-
-Design references: [Streamlit theming](https://docs.streamlit.io/develop/concepts/configuration/theming), [Streamlit Gallery](https://streamlit.io/gallery), [DM Sans](https://fonts.google.com/specimen/DM+Sans), and [Manrope](https://fonts.google.com/specimen/Manrope).
+The Streamlit interface uses a light neutral background and restrained green accents. It uses standard system fonts and Streamlit controls, without external font downloads or decorative icon-heavy sections. The theme is configured in `.streamlit/config.toml` and is applied when launching from the workspace root.
 
 ## Project layout
 
@@ -114,6 +112,6 @@ The suite covers graph and grid behavior, path correctness, weighted-path distin
 - Candidate priors are manually supplied; the system does not learn or update beliefs from observations.
 - The simulation assumes the selected actual location contains the item. It does not integrate sensors, databases, or a real campus map.
 - Room search effort is fixed per bundled campus location.
-- Memory usage and benchmark sweeps over candidate-count variation are not currently collected; the proposal-coverage view calls out these gaps.
+- Benchmarks record peak Python allocation per search. The Benchmarks page also includes a deterministic candidate-count sensitivity view for the bundled campus map.
 - A dynamic obstacle is applied before the search/mission is run; there is no external event feed or live sensor-based rerouting.
 - The nearest-neighbor candidate tour is an approximation and does not guarantee the globally shortest tour.

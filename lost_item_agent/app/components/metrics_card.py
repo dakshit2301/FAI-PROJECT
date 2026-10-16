@@ -20,47 +20,48 @@ def render_search_result_metrics(result: SearchResult, title: str = "Execution M
     # Success / Failure banner
     if result.success:
         st.success(
-            f"✅ **Candidate reached.** Found a route from `{result.start}` to `{result.goal}` "
+            f"**Candidate reached.** Found a route from `{result.start}` to `{result.goal}` "
             f"using **{result.algorithm}** (Heuristic: `{result.heuristic_used or 'None'}`)."
         )
     else:
         st.error(
-            f"❌ **Candidate unreachable.** No valid route exists from `{result.start}` to `{result.goal}` "
+            f"**Candidate unreachable.** No valid route exists from `{result.start}` to `{result.goal}` "
             f"(Notes: {result.notes or 'frontier exhausted'})."
         )
 
-    # Key metric columns
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # Split the metrics into two readable rows so labels do not truncate on laptop widths.
+    primary_cols = st.columns(3)
 
-    with col1:
+    with primary_cols[0]:
         st.metric(
-            label="Path Cost (Distance)",
+            label="Path Cost",
             value=f"{result.path_cost:.2f}" if result.success else "N/A",
             help="Sum of edge weights along the returned path. Equal to hop count on uniform grids.",
         )
 
-    with col2:
+    with primary_cols[1]:
         st.metric(
-            label="Path Length (Hops)",
+            label="Path Hops",
             value=f"{result.path_length}" if result.success else "N/A",
             help="Number of transitions (edges) from start to goal.",
         )
 
-    with col3:
+    with primary_cols[2]:
         st.metric(
-            label="Nodes Expanded",
+            label="Expanded",
             value=f"{result.nodes_expanded}",
             help="Number of states popped from the priority queue / frontier.",
         )
 
-    with col4:
+    secondary_cols = st.columns(2)
+    with secondary_cols[0]:
         st.metric(
-            label="Nodes Generated",
+            label="Generated",
             value=f"{result.nodes_generated}",
             help="Total valid neighbor states added to the frontier (including duplicates).",
         )
 
-    with col5:
+    with secondary_cols[1]:
         st.metric(
             label="Execution Time",
             value=f"{result.execution_time_ms:.3f} ms",
@@ -84,7 +85,7 @@ def render_candidate_metrics_table(results: list[CandidateResult]):
         rows.append({
             "Rank": f"#{r.rank}",
             "Candidate Location": r.candidate,
-            "Reachable": "✅ Yes" if r.reachable else "❌ No",
+            "Reachable": "Yes" if r.reachable else "No",
             "Walking Cost": f"{r.pathfinding_cost:.1f}" if r.reachable else "∞",
             "Room Search": f"{r.search_cost:.1f}",
             "Belief P(Item)": f"{r.probability_weight:.2f}",

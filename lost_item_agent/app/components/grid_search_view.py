@@ -23,10 +23,9 @@ def render_grid_search_playground():
     """
     Interactive 2D grid search view.
     """
-    st.subheader("🏁 2D Grid Search Playground")
+    st.subheader("Grid search")
     st.markdown(
-        "Generate configurable 2D grids with randomized obstacles, select start and goal coordinates, "
-        "and observe how BFS, Greedy, and A* navigate obstacles."
+        "Choose a grid, start, goal, and algorithm to examine a search route."
     )
 
     col1, col2, col3, col4 = st.columns(4)
@@ -71,7 +70,8 @@ def render_grid_search_playground():
         grid=grid,
         start_pos=start_cell,
         path=res.path if res.success else None,
-        recovered_pos=goal_cell if res.success else None,
+        goal_pos=goal_cell,
+        explored_cells=res.explored_nodes,
     )
     st.pyplot(fig)
     plt.close(fig)

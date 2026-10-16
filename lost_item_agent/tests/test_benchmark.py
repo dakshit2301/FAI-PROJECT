@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 
+from benchmark.evidence import build_decision_log, candidate_count_sensitivity
 from benchmark.exporter import export_csv, pivot_metric, summarize
 from benchmark.runner import BenchmarkRecord, BenchmarkRunner
 from benchmark.scenarios import BenchmarkScenario, FAST_SCENARIOS, SCENARIOS
@@ -189,6 +190,30 @@ class TestBenchmarkExporter:
         assert "mean_nodes_expanded" in summary.columns
         assert "mean_execution_time_ms" in summary.columns
         assert "success_rate" in summary.columns
+        assert "mean_memory_peak_kib" in summary.columns
+
+    def test_memory_footprint_is_measured(self, sample_results_df: pd.DataFrame):
+        assert "memory_peak_kib" in sample_results_df.columns
+        assert (sample_results_df["memory_peak_kib"] > 0).all()
+
+    def test_candidate_count_sensitivity_is_repeatable(self):
+        first = candidate_count_sensitivity((1, 2, 3))
+        second = candidate_count_sensitivity((1, 2, 3))
+        assert len(first) == 9
+        assert first[["candidate_count", "algorithm", "total_nodes_expanded"]].equals(
+            second[["candidate_count", "algorithm", "total_nodes_expanded"]]
+        )
+
+    def test_decision_log_includes_step_sequence(self):
+        from environment.locations import build_default_campus
+        from planner.candidate_planner import CandidatePlanner
+
+        steps = CandidatePlanner(build_default_campus()).execute_mission(
+            "Main Entrance", ["Reception"], "Reception"
+        )
+        log = build_decision_log("Main Entrance", "A*", steps)
+        assert "| 1 | Main Entrance | Reception |" in log
+        assert "Item recovered" in log
 
     def test_summary_keeps_failed_search_effort_but_excludes_failed_paths(self):
         df = pd.DataFrame([

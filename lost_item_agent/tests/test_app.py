@@ -12,7 +12,12 @@ import sys
 from pathlib import Path
 import pytest
 
+import matplotlib.pyplot as plt
 from streamlit.testing.v1 import AppTest
+
+from app.components.campus_map_view import draw_campus_map, draw_grid_map
+from environment.grid import GridMap
+from environment.locations import build_default_campus
 
 
 @pytest.fixture
@@ -31,36 +36,36 @@ class TestStreamlitApp:
     def test_navigation_to_comparison(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
         at.run()
-        # Switch to Multi-Algorithm Comparison
+        # Switch to Algorithm Comparison
         radio = at.sidebar.radio[0]
-        radio.set_value("⚖️ Multi-Algorithm Comparison")
+        radio.set_value("Algorithm Comparison")
         at.run()
         assert not at.exception, f"Comparison view threw exception: {at.exception}"
 
     def test_navigation_to_grid_search(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
         at.run()
-        # Switch to 2D Grid Search Playground
+        # Switch to Grid Search
         radio = at.sidebar.radio[0]
-        radio.set_value("🏁 2D Grid Search Playground")
+        radio.set_value("Grid Search")
         at.run()
         assert not at.exception, f"Grid playground threw exception: {at.exception}"
 
     def test_navigation_to_benchmarks(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
         at.run()
-        # Switch to Experimental Benchmarks
+        # Switch to Benchmarks
         radio = at.sidebar.radio[0]
-        radio.set_value("📊 Experimental Benchmarks")
+        radio.set_value("Benchmarks")
         at.run()
         assert not at.exception, f"Benchmark view threw exception: {at.exception}"
 
     def test_navigation_to_methodology(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
         at.run()
-        # Switch to AI Theory & Methodology
+        # Switch to Methodology
         radio = at.sidebar.radio[0]
-        radio.set_value("📘 AI Theory & Methodology")
+        radio.set_value("Methodology")
         at.run()
         assert not at.exception, f"Methodology view threw exception: {at.exception}"
 
@@ -112,13 +117,19 @@ class TestStreamlitApp:
         assert not at.exception, f"Planning with search history failed: {at.exception}"
         assert "Washroom-G" in str(at.dataframe[0].value)
 
-    def test_methodology_shows_proposal_coverage(self, app_path: str):
+    def test_methodology_shows_project_requirements_without_viva_extras(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
         at.run()
-        at.sidebar.radio[0].set_value("📘 AI Theory & Methodology")
+        at.sidebar.radio[0].set_value("Methodology")
         at.run()
-        assert not at.exception, f"Proposal coverage view failed: {at.exception}"
-        assert any("Proposal requirement" in str(table.value) for table in at.dataframe)
+        assert not at.exception, f"Methodology view failed: {at.exception}"
+        assert [tab.label for tab in at.tabs] == [
+            "PEAS",
+            "Problem formulation",
+            "Algorithms",
+            "Candidate search",
+        ]
+        assert any("PEAS" in heading.value for heading in at.subheader)
 
     def test_custom_item_description_is_used_in_mission(self, app_path: str):
         at = AppTest.from_file(app_path, default_timeout=30)
@@ -148,3 +159,41 @@ class TestStreamlitApp:
             at = AppTest.from_file(str(repo_root_path), default_timeout=30)
             at.run()
             assert not at.exception, f"Repo root app.py threw exception: {at.exception}"
+
+
+class TestMapLegends:
+    def test_grid_goal_is_distinct_from_recovered_location(self):
+        fig = draw_grid_map(
+            GridMap(5, 5),
+            start_pos="(0,0)",
+            path=["(0,0)", "(0,1)", "(0,2)"],
+            goal_pos="(0,2)",
+        )
+
+        cells = fig.axes[0].images[0].get_array()
+        assert cells[0, 0] == 5
+        assert cells[0, 1] == 3
+        assert cells[0, 2] == 6
+        legend_labels = [text.get_text() for text in fig.legends[0].get_texts()]
+        assert "Goal (G)" in legend_labels
+        assert "Recovered" not in legend_labels
+        plt.close(fig)
+
+    def test_campus_map_has_semantic_status_legend(self):
+        fig = draw_campus_map(
+            build_default_campus(),
+            start_node="Main Entrance",
+            last_known_node="Library",
+            candidate_nodes=["Library"],
+            path=["Main Entrance", "Reception"],
+            recovered_node="Library",
+            blocked_edges=[("Corridor-G1", "Library")],
+            visited_nodes=["Library"],
+        )
+
+        legend_labels = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        assert "Current position" in legend_labels
+        assert "Planned route" in legend_labels
+        assert "Blocked corridor" in legend_labels
+        assert "Recovered (simulation)" in legend_labels
+        plt.close(fig)

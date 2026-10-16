@@ -29,7 +29,7 @@ def render_algorithm_comparison(
     """
     Executes BFS, Greedy, and A* on the exact same problem instance and displays comparative analysis.
     """
-    st.subheader(f"⚖️ Algorithmic Comparison: `{start}` → `{goal}`")
+    st.subheader(f"Route comparison: `{start}` → `{goal}`")
 
     # Select appropriate heuristic
     heuristic = manhattan_distance if is_grid else euclidean_distance
@@ -56,7 +56,7 @@ def render_algorithm_comparison(
                 unsafe_allow_html=True,
             )
 
-            st.write(f"**Status:** {'✅ Success' if res.success else '❌ Failed'}")
+            st.write(f"**Status:** {'Success' if res.success else 'Failed'}")
             st.write(f"**Path Cost:** `{res.path_cost:.2f}`" if res.success else "**Path Cost:** `N/A`")
             st.write(f"**Path Hops:** `{res.path_length}`")
             st.write(f"**Nodes Expanded:** `{res.nodes_expanded}`")
@@ -70,7 +70,7 @@ def render_algorithm_comparison(
                     st.write("No path found.")
 
     # Comparative Analysis Table
-    st.markdown("#### 📋 Comparative Summary Table")
+    st.markdown("#### Results")
     summary_data = {
         "Metric": [
             "Path Cost (Weighted)",
@@ -108,29 +108,29 @@ def render_algorithm_comparison(
     st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
     # Academic Findings Breakdown
-    st.markdown("#### 🔬 Academic Observations for Evaluation")
+    st.markdown("#### Comparison notes")
     obs = []
     if res_astar.success and res_bfs.success:
         if res_astar.path_cost < res_bfs.path_cost:
             obs.append(
-                f"🌟 **Weight Optimality:** A* found a lower cost path ({res_astar.path_cost:.1f}) than BFS ({res_bfs.path_cost:.1f}). "
+                f"**Path cost:** A* found a lower cost path ({res_astar.path_cost:.1f}) than BFS ({res_bfs.path_cost:.1f}). "
                 "This occurs because BFS optimizes hop count, ignoring weighted edge distances."
             )
         elif res_astar.path_cost == res_bfs.path_cost:
             obs.append(
-                f"✅ **Uniform Cost Agreement:** A* and BFS returned identical optimal path costs ({res_astar.path_cost:.1f})."
+                f"**Equal path cost:** A* and BFS returned identical path costs ({res_astar.path_cost:.1f})."
             )
 
     if res_greedy.success and res_astar.success:
         if res_greedy.path_cost > res_astar.path_cost:
             obs.append(
-                f"⚠️ **Greedy Sub-Optimality Demonstrated:** Greedy Best-First found a suboptimal path of cost "
+                f"**Greedy path cost:** Greedy Best-First found a path of cost "
                 f"{res_greedy.path_cost:.1f} compared to A*'s {res_astar.path_cost:.1f}. "
                 "Greedy minimizes estimated remaining cost h(n) greedily without accounting for past path cost g(n)."
             )
         if res_greedy.nodes_expanded < res_astar.nodes_expanded:
             obs.append(
-                f"⚡ **Greedy Speed Tradeoff:** Greedy expanded fewer nodes ({res_greedy.nodes_expanded}) than A* ({res_astar.nodes_expanded}), "
+                f"**Expanded nodes:** Greedy expanded fewer nodes ({res_greedy.nodes_expanded}) than A* ({res_astar.nodes_expanded}), "
                 "demonstrating how purely goal-directed search can be faster when optimality is not required."
             )
 

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+from benchmark.evidence import candidate_count_sensitivity
 from benchmark.exporter import summarize
 from benchmark.runner import BenchmarkRunner
 from benchmark.scenarios import (
@@ -32,29 +33,27 @@ def render_benchmark_page():
     """
     Renders the benchmark control panel, live evaluation runner, charts, and CSV download.
     """
-    st.header("📊 Experimental Benchmarking Suite")
+    st.header("Benchmarks")
     st.markdown(
-        "Empirically compare **BFS**, **Greedy Best-First**, and **A*** across varying grid sizes, "
-        "obstacle densities, and campus topologies under strictly controlled, reproducible conditions."
+        "Compare BFS, Greedy Best-First Search, and A* across the available maps "
+        "using the same start and goal for each trial."
     )
 
-    # Configuration Card
-    with st.container():
-        col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
 
-        with col1:
-            suite_type = st.radio(
-                "Benchmark Scenario Suite",
-                options=["Standard Suite (6 Scenarios)", "Fast CI Suite (3 Scenarios)", "Custom Grid Experiment"],
-                index=1,  # Default to Fast for quick responsiveness
-                help="Standard includes 5×5 up to 50×50 stress tests plus the 20-node campus map.",
-            )
+    with col1:
+        suite_type = st.radio(
+            "Scenario set",
+            options=["Standard Suite (6 Scenarios)", "Fast CI Suite (3 Scenarios)", "Custom Grid Experiment"],
+            index=1,
+            help="The standard suite includes 5×5 to 50×50 grids and the campus map.",
+        )
 
-        with col2:
-            seed = st.number_input("RNG Master Seed", value=42, min_value=1, max_value=99999, help="Guarantees exact reproducibility across runs.")
+    with col2:
+        seed = st.number_input("Seed", value=42, min_value=1, max_value=99999, help="Reproduces map and start/goal sampling.")
 
-        with col3:
-            num_trials = st.slider("Trials per Scenario", min_value=1, max_value=10, value=3, help="Number of random (start, goal) pairs per scenario.")
+    with col3:
+        num_trials = st.slider("Trials per scenario", min_value=1, max_value=10, value=3)
 
     # Custom experiment options
     custom_scenarios = None
@@ -82,7 +81,7 @@ def render_benchmark_page():
         ]
 
     # Run Button
-    run_btn = st.button("🚀 Execute Benchmark Experiments", type="primary", use_container_width=True)
+    run_btn = st.button("Run benchmarks", type="primary", use_container_width=True)
 
     if run_btn:
         # Determine scenarios to run
@@ -138,9 +137,14 @@ def render_benchmark_page():
         raw_df = st.session_state["benchmark_df"]
         summary_df = summarize(raw_df)
 
-        st.success(f"✅ Evaluated {len(raw_df)} total algorithm runs across {raw_df['scenario_name'].nunique()} scenarios.")
+        st.success(
+            f"Evaluated {len(raw_df)} algorithm runs across "
+            f"{raw_df['scenario_name'].nunique()} scenarios."
+        )
 
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary Statistics", "📈 Performance Charts", "📦 Raw Trial Data", "💾 Export CSV"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "Summary", "Charts", "Trial data", "CSV export", "Scalability evidence"
+        ])
 
         with tab1:
             st.markdown("### Aggregated Benchmark Metrics")
@@ -193,13 +197,13 @@ def render_benchmark_page():
             st.dataframe(raw_df, use_container_width=True)
 
         with tab4:
-            st.markdown("### Download Reproducible CSV Datasets")
+            st.markdown("### Download benchmark data")
             csv_buffer = io.StringIO()
             raw_df.to_csv(csv_buffer, index=False)
             csv_str = csv_buffer.getvalue()
 
             st.download_button(
-                label="📥 Download Raw Benchmark Data (CSV)",
+                label="Download raw trial data (CSV)",
                 data=csv_str,
                 file_name="lost_item_agent_benchmark_results.csv",
                 mime="text/csv",
@@ -211,10 +215,31 @@ def render_benchmark_page():
             sum_str = sum_buffer.getvalue()
 
             st.download_button(
-                label="📥 Download Summary Aggregations (CSV)",
+                label="Download summary data (CSV)",
                 data=sum_str,
                 file_name="lost_item_agent_benchmark_summary.csv",
                 mime="text/csv",
             )
+
+        with tab5:
+            st.markdown("### Candidate-count sensitivity")
+            st.caption(
+                "Each algorithm plans the same deterministic campus candidate sets. "
+                "This isolates the effect of candidate-set size on planning work."
+            )
+            sensitivity_df = candidate_count_sensitivity()
+            st.dataframe(sensitivity_df, use_container_width=True, hide_index=True)
+            st.line_chart(
+                sensitivity_df.pivot(
+                    index="candidate_count", columns="algorithm", values="total_nodes_expanded"
+                )
+            )
+            sensitivity_csv = sensitivity_df.to_csv(index=False)
+            st.download_button(
+                label="Download candidate-count sensitivity (CSV)",
+                data=sensitivity_csv,
+                file_name="candidate_count_sensitivity.csv",
+                mime="text/csv",
+            )
     else:
-        st.info("Click **Execute Benchmark Experiments** above to run the empirical test suite and generate comparison plots.")
+        st.info("Run the selected scenarios to view metrics, charts, and CSV data.")

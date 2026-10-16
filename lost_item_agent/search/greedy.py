@@ -94,6 +94,7 @@ def greedy_best_first(
             execution_time_ms=elapsed,
             success=True,
             heuristic_used=_heuristic_name(heuristic),
+            explored_nodes=[start],
         )
 
     # ---- Greedy BFS ---------------------------------------------------------
@@ -108,6 +109,7 @@ def greedy_best_first(
     visited: set[str] = set()
     nodes_expanded = 0
     nodes_generated = 1  # start
+    explored_nodes: list[str] = []
 
     while heap:
         _, _, current, path, cost = heapq.heappop(heap)
@@ -116,6 +118,7 @@ def greedy_best_first(
             continue
         visited.add(current)
         nodes_expanded += 1
+        explored_nodes.append(current)
 
         if current == goal:
             elapsed = (time.perf_counter() - t_start) * 1000
@@ -130,6 +133,7 @@ def greedy_best_first(
                 execution_time_ms=elapsed,
                 success=True,
                 heuristic_used=_heuristic_name(heuristic),
+                explored_nodes=explored_nodes,
             )
 
         for neighbor, weight in _get_neighbors(graph, current):
@@ -154,6 +158,7 @@ def greedy_best_first(
         execution_time_ms=elapsed,
         heuristic_used=_heuristic_name(heuristic),
         notes="Goal is unreachable from start.",
+        explored_nodes=explored_nodes,
     )
 
 

@@ -1,8 +1,7 @@
 """
 app/components/methodology_view.py
 ----------------------------------
-Academic documentation, PEAS formulation, algorithmic theory,
-and college evaluation defense guide.
+Project formulation and search-method documentation.
 """
 
 from __future__ import annotations
@@ -12,26 +11,23 @@ import streamlit as st
 
 def render_methodology_page():
     """
-    Renders comprehensive academic AI theory, PEAS model, and viva presentation guide.
+    Render the project formulation, algorithms, and candidate-search method.
     """
-    st.header("📘 AI Search Theory, Problem Formulation & Evaluation Guide")
+    st.header("Project methodology")
     st.markdown(
-        "This section documents the formal AI problem formulation, mathematical models, "
-        "algorithmic guarantees, and presentation guide for college coursework evaluation."
+        "Problem formulation and search methods used in this prototype."
     )
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🤖 PEAS Model",
-        "🗺️ State-Space Formulation",
-        "⚡ Algorithms & Heuristics",
-        "🎯 Multi-Candidate Ranking",
-        "🎓 Viva & Demo Guide",
-        "📑 Proposal Coverage",
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "PEAS",
+        "Problem formulation",
+        "Algorithms",
+        "Candidate search",
     ])
 
     # TAB 1: PEAS Model
     with tab1:
-        st.subheader("1. PEAS Agent Formulation")
+        st.subheader("PEAS")
         st.markdown(
             "Under the standard Russell & Norvig artificial intelligence framework, "
             "an intelligent agent is defined by its **PEAS** descriptor:"
@@ -69,7 +65,7 @@ def render_methodology_page():
 
     # TAB 2: State-Space Formulation
     with tab2:
-        st.subheader("2. Formal State-Space Problem Formulation")
+        st.subheader("State-space problem")
         st.markdown("""
         Every classical AI search problem is formally defined by a 5-tuple:
         $$\\mathcal{P} = \\langle S, s_0, A(s), \\text{Result}(s, a), \\text{GoalTest}(s), c(s, a, s') \\rangle$$
@@ -95,20 +91,20 @@ def render_methodology_page():
 
     # TAB 3: Algorithms & Heuristics
     with tab3:
-        st.subheader("3. Algorithm Comparative Analysis & Guarantees")
+        st.subheader("Search algorithms")
 
         st.markdown("""
         | Property | Breadth-First Search (BFS) | Greedy Best-First Search | A* Search |
         |---|---|---|---|
         | **Frontier Data Structure** | FIFO Queue (`collections.deque`) | Priority Queue (`heapq`) | Priority Queue (`heapq`) |
         | **Evaluation Function $f(n)$** | $f(n) = \\text{depth}(n)$ | $f(n) = h(n)$ | $f(n) = g(n) + h(n)$ |
-        | **Cost-Optimality** | ❌ Hop-optimal only (suboptimal if edges weighted) | ❌ Not guaranteed | ✅ Provably cost-optimal (with admissible $h$) |
-        | **Completeness** | ✅ Complete on finite graphs | ✅ Complete on finite graphs with visited set | ✅ Complete on finite graphs |
+        | **Cost-Optimality** | Hop-optimal only; not cost-optimal with varying edge weights | Not guaranteed | Cost-optimal with admissible $h$ |
+        | **Completeness** | Complete on finite graphs | Complete on finite graphs with a visited set | Complete on finite graphs |
         | **Time Complexity** | $O(b^d)$ | $O(b^m)$ worst case | Exponential worst case |
         | **Space Complexity** | $O(b^d)$ (keeps all nodes in memory) | $O(b^m)$ (keeps all frontier nodes) | $O(b^d)$ (keeps all open/closed nodes) |
         """)
 
-        st.markdown("#### 📐 Heuristics and Admissibility Proofs")
+        st.markdown("#### Heuristics")
         st.markdown("""
         A heuristic $h(n)$ is **admissible** if it never overestimates the true cost to reach the goal:
         $$0 \\le h(n) \\le h^*(n) \\quad \\forall n \\in S$$
@@ -127,7 +123,7 @@ def render_methodology_page():
 
     # TAB 4: Multi-Candidate Ranking
     with tab4:
-        st.subheader("4. Multi-Candidate Planning Formula")
+        st.subheader("Candidate priority and visit order")
         st.markdown("""
         In real campus scenarios, a student does not know which room holds their lost item, but has candidate possibilities with prior beliefs.
 
@@ -140,106 +136,7 @@ def render_methodology_page():
         - $P(\\text{Item at } c) \\in [0, 1]$: Prior probability belief.
         - $(1 - P)$: Cost multiplier — high probability locations get their score reduced, ranking them higher!
 
-        #### ⚠️ Academic Disclosures:
+        #### Assumptions and limitations
         1. **No Artificial Learning Claims:** The probabilities $P(\\text{Item at } c)$ are student-specified heuristic beliefs (priors), **not** machine-learned from historical training data.
         2. **Greedy Nearest-Neighbor Tour:** The full multi-room visit sequence uses an $O(n^2)$ greedy nearest-neighbor tour. Solving the multi-room sequence optimally is an instance of the Travelling Salesman Problem (TSP), which is NP-hard.
         """)
-
-    # TAB 5: College Evaluation Guide
-    with tab5:
-        st.subheader("🎓 College Evaluation & Defense Guide")
-        st.markdown("Use these model answers when presenting to your project examiner:")
-
-        with st.expander("Q1: Why did you choose A* over Dijkstra?"):
-            st.markdown(
-                "**Answer:** A* adds a heuristic estimate $h(n)$ to the known path cost $g(n)$. "
-                "With an admissible heuristic it preserves optimal path cost; it may expand fewer nodes "
-                "than Dijkstra, but that is not guaranteed for every map. Setting $h(n)=0$ makes A* "
-                "equivalent to Dijkstra's algorithm."
-            )
-
-        with st.expander("Q2: Can you prove Greedy Best-First Search is not optimal?"):
-            st.markdown(
-                "**Answer:** Yes. In our comparison tab and automated tests, we demonstrate instances where Greedy chooses "
-                "a path with an immediate low $h(n)$ that leads into a detour or dead-end, resulting in a higher total path cost "
-                "than A*. Greedy minimizes estimated remaining cost $h(n)$ greedily and completely ignores past path cost $g(n)$."
-            )
-
-        with st.expander("Q3: Does BFS always find the shortest path?"):
-            st.markdown(
-                "**Answer:** BFS guarantees the shortest path in terms of **hop count (edge transitions)**, which is optimal "
-                "only when all edge weights are equal (uniform cost). On a weighted graph (such as our campus map with corridors of "
-                "different lengths), BFS can return a path with higher total walking cost than A*."
-            )
-
-        with st.expander("Q4: How do you handle dynamic obstacles (e.g. locked doors)?"):
-            st.markdown(
-                "**Answer:** The environment supports edge blocking, and blocked edges are excluded from traversable neighbors. "
-                "The user selects closures before running a search; running the planner again recomputes routes. "
-                "There is no live sensor-based closure detection."
-            )
-
-        with st.expander("Q5: What makes your benchmarking scientifically fair?"):
-            st.markdown(
-                "**Answer:** We enforce 5 strict fairness rules in `BenchmarkRunner`: "
-                "1) All algorithms execute on the exact same graph/grid instance per trial; "
-                "2) Start and goal pairs are seeded and identical; "
-                "3) Search-function wall time is measured (including validation and path reconstruction, excluding UI rendering); "
-                "4) Unreachable trials are handled cleanly without crashing; "
-                "5) All results are computed live without hard-coded numbers."
-            )
-
-    with tab6:
-        st.subheader("How the prototype matches the submitted proposal")
-        st.caption(
-            "This checklist compares the running application with "
-            "Lost_Item_Recovery_Agent_Project_Proposal.pdf."
-        )
-        coverage = pd.DataFrame([
-            {
-                "Proposal requirement": "PEAS and graph/grid state-space model",
-                "Status": "Implemented",
-                "Evidence / limitation": "Campus graph, obstacle grid, and formal PEAS/state-space explanation.",
-            },
-            {
-                "Proposal requirement": "Proposal workflow inputs",
-                "Status": "Implemented",
-                "Evidence / limitation": "Item, last-seen location, current position, visited places, and candidate locations.",
-            },
-            {
-                "Proposal requirement": "Proposal algorithms and heuristic search",
-                "Status": "Implemented",
-                "Evidence / limitation": "BFS, Greedy, and A* are available with path metrics and heuristic choices.",
-            },
-            {
-                "Proposal requirement": "Proposal recommended order and route visualization",
-                "Status": "Implemented",
-                "Evidence / limitation": "Candidate ranking, nearest-neighbor visit order, simulated inspections, and campus map.",
-            },
-            {
-                "Proposal requirement": "Proposal benchmark sizes, obstacles, and result metrics",
-                "Status": "Mostly implemented",
-                "Evidence / limitation": "Seeded size/density scenarios and CSV charts; candidate-count sweeps and memory usage are not benchmarked.",
-            },
-            {
-                "Proposal requirement": "Proposal failure-case evaluation",
-                "Status": "Partly implemented",
-                "Evidence / limitation": "Unreachable paths and blocked corridors are tested; incorrect last-seen assumptions are not a dedicated benchmark.",
-            },
-            {
-                "Proposal requirement": "Real campus sensors or live closure detection",
-                "Status": "Simulation only",
-                "Evidence / limitation": "Locations, item truth, and closures are manually selected; no live sensor integration is claimed.",
-            },
-            {
-                "Proposal requirement": "Final report and GitHub repository deliverables",
-                "Status": "Outside this prototype",
-                "Evidence / limitation": "These are course-submission tasks, not features of the running Streamlit app.",
-            },
-        ])
-        st.dataframe(coverage, use_container_width=True, hide_index=True)
-        st.info(
-            "The proposal is substantially represented by the prototype. "
-            "For an honest submission, document the unimplemented memory metric, "
-            "candidate-count benchmark sweep, and final report/repository separately."
-        )

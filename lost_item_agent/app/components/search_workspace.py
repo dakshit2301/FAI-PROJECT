@@ -45,17 +45,17 @@ def render_search_workspace():
     """
     Renders the campus lost-item planning and recovery workspace.
     """
-    st.markdown("## Plan a campus search")
+    st.subheader("Campus search")
     st.caption(
-        "Set the last-seen point and your current position, then let the agent "
-        "prioritize candidate rooms and calculate a route."
+        "Create a search brief first. The agent then ranks the likely locations and draws the route it would inspect."
     )
 
     all_locs = location_names()
     main_entrance = all_locs.index("Main Entrance") if "Main Entrance" in all_locs else 0
 
     with st.container(border=True):
-        st.markdown("### 01 · Search context")
+        st.markdown("#### 1. Search brief")
+        st.caption("Add the item context and the two locations that define this search.")
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -94,6 +94,7 @@ def render_search_workspace():
 
         candidate_col, visited_col = st.columns(2)
         with candidate_col:
+            st.markdown("**Likely search locations**")
             default_candidates = ITEM_TYPE_CANDIDATES.get(
                 selected_category, ["Library", "Lab-A", "Classroom-101"]
             )
@@ -106,6 +107,7 @@ def render_search_workspace():
             )
 
         with visited_col:
+            st.markdown("**Movement history**")
             visited_locations = st.multiselect(
                 "Places visited since you last saw it",
                 options=all_locs,
@@ -118,7 +120,7 @@ def render_search_workspace():
         ))
 
     candidate_probs: dict[str, float] = {}
-    with st.expander("Adjust location beliefs", expanded=False):
+    with st.expander("2. Refine the search assumptions", expanded=False):
         st.caption(
             "These are your manual prior beliefs, not learned probabilities. "
             "The model's room-search effort remains fixed for each location."
@@ -138,7 +140,7 @@ def render_search_workspace():
         else:
             st.info("Add at least one likely or visited location.")
 
-    with st.expander("Environment options · simulate blocked corridors"):
+    with st.expander("Simulate a blocked corridor", expanded=False):
         st.markdown(
             "Choose closures before the run. The simulation removes those connections, "
             "then calculates routes using the updated campus graph."
@@ -163,7 +165,8 @@ def render_search_workspace():
             u, v = label.split(" ↔ ")
             active_blocked_edges.append((u, v))
 
-    st.markdown("### 02 · Search strategy")
+    st.markdown("#### 3. Choose the search method")
+    st.caption("A* is recommended for the weighted campus map. Use BFS or Greedy to compare search behaviour.")
     col_alg1, col_alg2, col_alg3 = st.columns([1.3, 1.3, 1.1])
     with col_alg1:
         algo_choice = st.selectbox(
@@ -174,7 +177,7 @@ def render_search_workspace():
     with col_alg2:
         heuristic_choice = st.selectbox(
             "Heuristic",
-            options=["Euclidean Distance (Straight-line, Admissible)", "Manhattan Distance", "Null Heuristic (Dijkstra baseline)"],
+            options=["Euclidean Distance (Straight-line, Admissible)", "Null Heuristic (Dijkstra baseline)"],
             index=0,
             disabled=("BFS" in algo_choice),
         )
@@ -192,17 +195,22 @@ def render_search_workspace():
     elif "Null" in heuristic_choice:
         heuristic_func = null_heuristic
 
+    st.caption(
+        f"Search brief: **{item_description}** · from **{start_location}** · "
+        f"{len(search_candidates)} location(s) to investigate"
+    )
+
     # The two actions share the same validated search configuration.
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         run_plan_btn = st.button(
-            "Build search plan",
+            "Create ranked search plan",
             type="primary",
             use_container_width=True,
         )
     with col_btn2:
         run_sim_btn = st.button(
-            "Simulate recovery mission",
+            "Run simulated recovery",
             use_container_width=True,
         )
 
@@ -223,7 +231,8 @@ def render_search_workspace():
         plan_results = planner.plan(start_location, search_candidates, candidate_probs)
         visit_order = planner.recommended_visit_order(plan_results, start=start_location)
 
-        st.markdown("#### Prioritized candidate investigation")
+        st.markdown("### Search plan")
+        st.caption("Locations are ranked using travel cost, room inspection effort, and your stated belief.")
         render_candidate_metrics_table(plan_results)
 
         st.markdown(
@@ -232,6 +241,7 @@ def render_search_workspace():
         )
 
         recovered_index: int | None = None
+        explored_nodes: list[str] = []
         if search_mode == "mission":
             mission_steps = planner.execute_mission(
                 start_location,
@@ -260,6 +270,7 @@ def render_search_workspace():
                 })
                 if result.success:
                     path_nodes.extend(result.path[1:])
+                explored_nodes.extend(result.explored_nodes)
                 if step.item_found:
                     recovered_index = len(path_nodes) - 1
 
@@ -302,8 +313,9 @@ def render_search_workspace():
                     ),
                 )
                 path_nodes = search_res.path if search_res.success else []
+                explored_nodes = search_res.explored_nodes
 
-        st.markdown("#### Campus route")
+        st.markdown("### Route on the campus map")
         step_path = path_nodes
         if search_mode == "mission" and len(path_nodes) > 1:
             step_idx = st.slider(
@@ -329,6 +341,7 @@ def render_search_workspace():
             path=step_path,
             candidate_nodes=search_candidates,
             candidate_probs=candidate_probs,
+            explored_nodes=explored_nodes,
             recovered_node=recovered_node,
             visited_nodes=visited_locations,
             blocked_edges=active_blocked_edges,
@@ -337,14 +350,11 @@ def render_search_workspace():
         plt.close(fig_map)
 
     else:
-        map_col, guide_col = st.columns([1.35, 0.65], vertical_alignment="center")
+        map_col, guide_col = st.columns([1.55, 0.45], vertical_alignment="center")
         with map_col:
             with st.container(border=True):
                 st.markdown("### Campus map")
-                st.caption(
-                    "Teal: current position · violet: last seen · orange: candidate · "
-                    "purple outline: visited"
-                )
+                st.caption("This is a simulated campus map for the search exercise, not an official campus plan.")
                 fig_initial = draw_campus_map(
                     graph=campus,
                     start_node=start_location,
@@ -357,13 +367,7 @@ def render_search_workspace():
                 st.pyplot(fig_initial, use_container_width=True)
                 plt.close(fig_initial)
         with guide_col:
-            st.markdown("### Your search, in 3 steps")
-            st.markdown(
-                "1. **Set context** — choose where you last saw the item and where you are now.\n"
-                "2. **Choose locations** — combine likely rooms with places you visited.\n"
-                "3. **Run the agent** — compare the recommended order or simulate inspections."
-            )
-            st.info(
-                f"Ready to search **{len(search_candidates)}** location(s) "
-                f"with **{algo_choice.split(' (')[0]}**."
-            )
+            st.markdown("#### Before you run")
+            st.write("Review the locations on the map, then create a ranked plan or run the recovery simulation.")
+            st.metric("Locations selected", len(search_candidates))
+            st.metric("Blocked corridors", len(active_blocked_edges))

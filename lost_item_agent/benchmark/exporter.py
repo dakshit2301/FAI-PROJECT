@@ -87,6 +87,7 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
 
     metric_cols = [
         "execution_time_ms",
+        "memory_peak_kib",
         "nodes_expanded",
         "nodes_generated",
         "path_cost",

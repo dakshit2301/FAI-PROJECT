@@ -41,6 +41,7 @@ Fairness rules (enforced in code)
 from __future__ import annotations
 
 import random
+import tracemalloc
 from dataclasses import dataclass
 from typing import Optional
 
@@ -84,6 +85,7 @@ class BenchmarkRecord:
     nodes_expanded: int
     nodes_generated: int
     execution_time_ms: float
+    memory_peak_kib: float
     heuristic_used: str         # "none" for BFS
 
     def to_dict(self) -> dict:
@@ -102,6 +104,7 @@ class BenchmarkRecord:
             "nodes_expanded": self.nodes_expanded,
             "nodes_generated": self.nodes_generated,
             "execution_time_ms": self.execution_time_ms,
+            "memory_peak_kib": self.memory_peak_kib,
             "heuristic_used": self.heuristic_used,
         }
 
@@ -208,8 +211,12 @@ class BenchmarkRunner:
 
         for trial_idx, (start, goal) in enumerate(pairs, start=1):
             for algo_name in self.ALGORITHMS:
-                result = self._run_algorithm(algo_name, grid, start, goal, heuristic)
-                record = self._make_record(scenario, algo_name, trial_idx, start, goal, result)
+                result, memory_peak_kib = self._run_profiled_algorithm(
+                    algo_name, grid, start, goal, heuristic
+                )
+                record = self._make_record(
+                    scenario, algo_name, trial_idx, start, goal, result, memory_peak_kib
+                )
                 records.append(record)
 
         return records
@@ -231,8 +238,12 @@ class BenchmarkRunner:
 
         for trial_idx, (start, goal) in enumerate(pairs, start=1):
             for algo_name in self.ALGORITHMS:
-                result = self._run_algorithm(algo_name, campus, start, goal, heuristic)
-                record = self._make_record(scenario, algo_name, trial_idx, start, goal, result)
+                result, memory_peak_kib = self._run_profiled_algorithm(
+                    algo_name, campus, start, goal, heuristic
+                )
+                record = self._make_record(
+                    scenario, algo_name, trial_idx, start, goal, result, memory_peak_kib
+                )
                 records.append(record)
 
         return records
@@ -260,6 +271,22 @@ class BenchmarkRunner:
         else:  # A*
             return astar(graph, start, goal, heuristic)
 
+    @classmethod
+    def _run_profiled_algorithm(cls, algo_name, graph, start, goal, heuristic):
+        """Run one search and record its Python allocation peak in KiB.
+
+        ``execution_time_ms`` remains the algorithm's own wall-clock timing;
+        memory profiling is deliberately recorded separately so the benchmark
+        does not confuse instrumentation cost with search time.
+        """
+        tracemalloc.start()
+        try:
+            result = cls._run_algorithm(algo_name, graph, start, goal, heuristic)
+            _, peak_bytes = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        return result, peak_bytes / 1024.0
+
     # ------------------------------------------------------------------
     # Record construction
     # ------------------------------------------------------------------
@@ -272,6 +299,7 @@ class BenchmarkRunner:
         start: str,
         goal: str,
         result: SearchResult,
+        memory_peak_kib: float,
     ) -> BenchmarkRecord:
         nan = float("nan")
         return BenchmarkRecord(
@@ -289,6 +317,7 @@ class BenchmarkRunner:
             nodes_expanded=result.nodes_expanded,
             nodes_generated=result.nodes_generated,
             execution_time_ms=result.execution_time_ms,
+            memory_peak_kib=memory_peak_kib,
             heuristic_used=result.heuristic_used or "none",
         )
 
