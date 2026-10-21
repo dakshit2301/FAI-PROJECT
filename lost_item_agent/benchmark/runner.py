@@ -41,6 +41,7 @@ Fairness rules (enforced in code)
 from __future__ import annotations
 
 import random
+import threading
 import tracemalloc
 from dataclasses import dataclass
 from typing import Optional
@@ -55,6 +56,8 @@ from environment.models import SearchResult
 from search.astar import astar
 from search.bfs import bfs
 from search.greedy import greedy_best_first
+
+_TRACEMALLOC_LOCK = threading.Lock()
 from search.heuristics import euclidean_distance, manhattan_distance
 
 
@@ -279,12 +282,14 @@ class BenchmarkRunner:
         memory profiling is deliberately recorded separately so the benchmark
         does not confuse instrumentation cost with search time.
         """
-        tracemalloc.start()
-        try:
-            result = cls._run_algorithm(algo_name, graph, start, goal, heuristic)
-            _, peak_bytes = tracemalloc.get_traced_memory()
-        finally:
-            tracemalloc.stop()
+        with _TRACEMALLOC_LOCK:
+            tracemalloc.start()
+            tracemalloc.reset_peak()
+            try:
+                result = cls._run_algorithm(algo_name, graph, start, goal, heuristic)
+                _, peak_bytes = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
         return result, peak_bytes / 1024.0
 
     # ------------------------------------------------------------------

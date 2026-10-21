@@ -4,6 +4,16 @@ const state = {
   config: null,
   lastCampusResult: null,
   lastGridResult: null,
+  gridSelection: "start",
+  grid: {
+    rows: 10,
+    cols: 10,
+    density: 0.2,
+    seed: 42,
+    start: [0, 0],
+    goal: [9, 9],
+    obstacles: [],
+  },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -29,7 +39,12 @@ async function api(path, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await response.json();
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
   return data;
 }
@@ -43,6 +58,28 @@ function setBusy(element, busy, label) {
 function formatNumber(value, digits = 2) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   return Number(value).toFixed(digits);
+}
+
+function algorithmName(value) {
+  return ({
+    "A*": "Balanced route (A*)",
+    BFS: "Fewest steps (BFS)",
+    Greedy: "Head toward destination (Greedy)",
+    astar: "Balanced route (A*)",
+    bfs: "Fewest steps (BFS)",
+    greedy: "Head toward destination (Greedy)",
+  })[value] || value || "Unknown";
+}
+
+function algorithmShortName(value) {
+  return ({ "A*": "Balanced route", BFS: "Fewest steps", Greedy: "Direct route" })[value] || value;
+}
+
+function heuristicName(value) {
+  if (!value || value.toLowerCase() === "none") return "No estimate";
+  if (value.toLowerCase().includes("euclidean")) return "Direct-distance estimate";
+  if (value.toLowerCase().includes("manhattan")) return "Grid-distance estimate";
+  return value;
 }
 
 function optionMarkup(value, label = value) {
@@ -159,7 +196,7 @@ function renderBeliefs() {
       <label class="belief-row" for="belief-${index}">
         <span>${escapeHtml(candidate)}</span>
         <input id="belief-${index}" type="range" min="0.05" max="0.95" step="0.05" value="0.5" data-candidate="${escapeHtml(candidate)}">
-        <output>0.50</output>
+        <output>50%</output>
       </label>`).join("")
     : '<p class="field-help">Choose at least one location to adjust beliefs.</p>';
 }
@@ -191,6 +228,36 @@ function searchPayload(mode) {
   };
 }
 
+function approachDescription(value) {
+  return ({
+    astar: "Balanced route (A*) weighs distance already travelled and estimated distance left. It is the recommended choice.",
+    bfs: "Fewest steps (BFS) chooses the route with the fewest connections. It does not account for different corridor lengths.",
+    greedy: "Head toward the destination (Greedy) follows what looks closest next, but may choose a longer route.",
+  })[value];
+}
+
+function updateApproachHelp() {
+  $("#approach-help").textContent = `${approachDescription($("#search-algorithm").value)} The distance estimate helps A* and Greedy choose where to search; BFS does not use it.`;
+}
+
+function updateGridApproachHelp() {
+  $("#grid-approach-help").textContent = approachDescription($("#grid-algorithm").value);
+}
+
+function scenarioName(value) {
+  const names = {
+    "Tiny-Open": "Very small, no blocked spaces",
+    "Small-Light": "Small, a few blocked spaces",
+    "Medium-Moderate": "Medium, some blocked spaces",
+    "Large-Dense": "Large, many blocked spaces",
+    "Stress-Test": "Very large practice map",
+    "Campus-Graph": "Campus layout",
+  };
+  if (names[value]) return names[value];
+  if (value.startsWith("Custom-")) return `Your custom map (${value.slice("Custom-".length)})`;
+  return value;
+}
+
 function metricsMarkup(search, heading) {
   if (!search) return "";
   const cost = search.success ? formatNumber(search.path_cost) : "No route";
@@ -198,13 +265,13 @@ function metricsMarkup(search, heading) {
     <h3>${escapeHtml(heading)}</h3>
     <div class="metric-grid">
       <div class="metric"><span>Status</span><strong>${search.success ? "Found" : "Unreachable"}</strong></div>
-      <div class="metric"><span>Path cost</span><strong>${cost}</strong></div>
-      <div class="metric"><span>Path length</span><strong>${search.path_length}</strong></div>
-      <div class="metric"><span>Nodes expanded</span><strong>${search.nodes_expanded}</strong></div>
-      <div class="metric"><span>Nodes generated</span><strong>${search.nodes_generated}</strong></div>
-      <div class="metric"><span>Runtime</span><strong>${formatNumber(search.execution_time_ms, 3)} ms</strong></div>
-      <div class="metric"><span>Algorithm</span><strong>${escapeHtml(search.algorithm)}</strong></div>
-      <div class="metric"><span>Heuristic</span><strong>${escapeHtml(search.heuristic_used || "None")}</strong></div>
+      <div class="metric"><span>Travel effort <span class="muted">(path cost)</span></span><strong>${cost}</strong></div>
+      <div class="metric"><span>Moves along route <span class="muted">(path length)</span></span><strong>${search.path_length}</strong></div>
+      <div class="metric"><span>Places considered <span class="muted">(expanded)</span></span><strong>${search.nodes_expanded}</strong></div>
+      <div class="metric"><span>Options added <span class="muted">(generated)</span></span><strong>${search.nodes_generated}</strong></div>
+      <div class="metric"><span>Computer search time</span><strong>${formatNumber(search.execution_time_ms, 3)} ms</strong></div>
+      <div class="metric"><span>Route-finding approach</span><strong>${escapeHtml(algorithmName(search.algorithm))}</strong></div>
+      <div class="metric"><span>Distance estimate used</span><strong>${escapeHtml(heuristicName(search.heuristic_used))}</strong></div>
     </div>
     ${search.path?.length ? `<div class="route-strip">${search.path.map(escapeHtml).join(" → ")}</div>` : ""}
   </div>`;
@@ -215,19 +282,20 @@ function candidateTable(results) {
   const rows = results.map((row) => `<tr>
     <td>${row.rank}</td><td>${escapeHtml(row.candidate)}</td><td>${row.reachable ? "Yes" : "No"}</td>
     <td>${formatNumber(row.pathfinding_cost)}</td><td>${formatNumber(row.search_cost)}</td>
-    <td>${formatNumber(row.probability_weight, 2)}</td><td>${formatNumber(row.priority_score)}</td>
+    <td>${Math.round(Number(row.probability_weight) * 100)}%</td><td>${formatNumber(row.priority_score)}</td>
     <td>${row.nodes_expanded}</td>
   </tr>`).join("");
-  return `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Candidate</th><th>Reachable</th><th>Travel cost</th><th>Search effort</th><th>Belief</th><th>Priority</th><th>Expanded</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Order</th><th>Place</th><th>Can reach?</th><th>Travel effort</th><th>Check effort</th><th>Your likelihood guess</th><th>Suggested order score</th><th>Places considered</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function missionTable(steps) {
   const rows = steps.map((step) => `<tr>
     <td>${escapeHtml(step.from_location)}</td><td>${escapeHtml(step.candidate)}</td>
-    <td>${escapeHtml(step.status)}</td><td>${step.search.success ? formatNumber(step.search.path_cost) : "—"}</td>
+    <td>${step.found ? "Item found" : step.search.success ? "Not found" : "Could not reach"}</td>
+    <td>${step.search.success ? formatNumber(step.search.path_cost) : "—"}</td>
     <td>${step.search.nodes_expanded}</td><td>${formatNumber(step.search.execution_time_ms, 3)}</td>
   </tr>`).join("");
-  return `<div class="table-wrap"><table><thead><tr><th>From</th><th>Inspected location</th><th>Outcome</th><th>Route cost</th><th>Expanded</th><th>Runtime</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Started at</th><th>Place checked</th><th>Result</th><th>Travel effort</th><th>Places considered</th><th>Computer time (ms)</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderCampusResults(result) {
@@ -244,14 +312,14 @@ function renderCampusResults(result) {
     : "";
   results.innerHTML = `
     <div class="card result-panel">
-      <h3>Candidate priority</h3>
-      <p class="field-help">Priority = (movement cost + inspection effort) × (1 − stated belief).</p>
+      <h3>Places to check first</h3>
+      <p class="field-help">The list considers how far away each place is, how much effort it takes to check, and any likelihood guesses you entered.</p>
       ${candidateTable(result.candidate_results)}
-      <p class="route-strip" style="margin-top:12px"><strong>Recommended tour:</strong> ${route || "No reachable candidates"}</p>
-      <p class="field-help" style="margin:10px 0 0">Visit order uses a greedy nearest-neighbor approximation, not an optimal TSP solution.</p>
+      <p class="route-strip" style="margin-top:12px"><strong>Suggested visit order:</strong> ${route || "No reachable places"}</p>
+      <details class="field-help explanation-disclosure"><summary>How was this order chosen?</summary><p>Nearby places are preferred, with your likelihood guesses and the effort needed to check each place also taken into account. A lower order score means a place appears earlier. This practical visit order is not guaranteed to be the shortest possible tour.</p></details>
     </div>
     ${result.mode === "plan" ? metricsMarkup(result.selected_search, "Route to the highest-priority reachable candidate") : ""}
-    ${result.mode === "mission" ? `<div class="card result-panel"><h3>Candidate inspection results</h3>${missionTable(result.mission)}${recovery}</div>` : ""}
+    ${result.mode === "mission" ? `<div class="card result-panel"><h3>Places checked</h3>${missionTable(result.mission)}${recovery}</div>` : ""}
     ${result.mode === "mission" && result.selected_search ? metricsMarkup(result.selected_search, "Final mission leg") : ""}`;
 }
 
@@ -274,48 +342,118 @@ async function runCampusSearch(mode, button) {
   }
 }
 
-function renderGridBoard(result) {
-  const search = result.search;
-  const obstacles = new Set(result.obstacles.map(([row, col]) => `${row},${col}`));
-  const path = new Set((search.path || []).map((name) => name.replace(/[()]/g, "")));
-  const explored = new Set((search.explored_nodes || []).map((name) => name.replace(/[()]/g, "")));
-  const start = search.start.replace(/[()]/g, "");
-  const goal = search.goal.replace(/[()]/g, "");
+function gridPositionName([row, col]) {
+  return `(${row},${col})`;
+}
+
+function renderGridBoard() {
+  const { rows, cols, start, goal, obstacles } = state.grid;
+  const obstacleSet = new Set(obstacles.map(([row, col]) => `${row},${col}`));
+  const search = state.lastGridResult?.search;
+  const resultMatchesSelection = search
+    && search.start === gridPositionName(start)
+    && search.goal === gridPositionName(goal);
+  const path = new Set(resultMatchesSelection ? (search.path || []).map((name) => name.replace(/[()]/g, "")) : []);
+  const explored = new Set(resultMatchesSelection ? (search.explored_nodes || []).map((name) => name.replace(/[()]/g, "")) : []);
+  const startKey = start.join(",");
+  const goalKey = goal.join(",");
   const cells = [];
-  for (let row = 0; row < result.rows; row += 1) {
-    for (let col = 0; col < result.cols; col += 1) {
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
       const key = `${row},${col}`;
       const classes = ["grid-cell"];
-      if (obstacles.has(key)) classes.push("obstacle");
-      else if (key === start) classes.push("start");
-      else if (key === goal) classes.push("goal");
+      const isObstacle = obstacleSet.has(key);
+      if (isObstacle) classes.push("obstacle");
+      else if (key === startKey) classes.push("start");
+      else if (key === goalKey) classes.push("goal");
       else if (path.has(key)) classes.push("path");
       else if (explored.has(key)) classes.push("explored");
-      cells.push(`<span class="${classes.join(" ")}" title="(${row}, ${col})"></span>`);
+      const description = isObstacle ? "blocked" : key === startKey ? "starting point" : key === goalKey ? "destination" : "open space";
+      cells.push(`<button class="${classes.join(" ")}" type="button" data-row="${row}" data-col="${col}"
+        aria-label="Row ${row + 1}, column ${col + 1}, ${description}" ${isObstacle ? "disabled" : ""}></button>`);
     }
   }
-  const details = metricsMarkup(search, "Grid search result");
-  $("#grid-results").innerHTML = `${details}<div class="card result-panel"><h3>Generated grid · seed ${result.seed}</h3>
-    <div class="map-legend"><span><i class="legend-dot current"></i>Start</span><span><i class="legend-dot candidate"></i>Goal</span><span><i class="legend-dot recovered" style="background:#a6d2bb"></i>Path</span><span><i class="legend-dot" style="background:#77837d"></i>Obstacle</span></div>
-    <div class="grid-board" style="grid-template-columns:repeat(${result.cols}, minmax(0,1fr))">${cells.join("")}</div></div>`;
+  $("#grid-map").innerHTML = `<div class="card-heading"><div><h3>Your practice map</h3><p>Choose clear squares for your starting point and destination.</p></div></div>
+    <div class="map-legend"><span><i class="legend-dot current"></i>Start</span><span><i class="legend-dot candidate"></i>Destination</span><span><i class="legend-dot recovered" style="background:#a6d2bb"></i>Suggested route</span><span><i class="legend-dot" style="background:#77837d"></i>Blocked</span></div>
+    <div class="grid-board" role="group" aria-label="Clickable practice map with ${rows} rows and ${cols} columns"
+      style="grid-template-columns:repeat(${cols}, minmax(0,1fr))">${cells.join("")}</div>`;
+  if (resultMatchesSelection) {
+    $("#grid-results").innerHTML = metricsMarkup(search, "Route-finding results");
+  } else {
+    $("#grid-results").innerHTML = "";
+  }
+}
+
+function updateGridSelectionHelp() {
+  const text = state.gridSelection === "start"
+    ? "Click a clear square to choose your starting point."
+    : state.gridSelection === "goal"
+      ? "Now click a different clear square for your destination."
+      : "Start and destination selected. Choose either button to change a point, then find a route.";
+  $("#grid-selection-help").textContent = text;
+  $$(".point-button").forEach((button) => {
+    const isSelected = button.dataset.point === state.gridSelection;
+    button.classList.toggle("active", isSelected);
+    button.setAttribute("aria-pressed", String(isSelected));
+  });
+}
+
+function selectGridPoint(event) {
+  const cell = event.target.closest(".grid-cell");
+  if (!cell || cell.disabled || !state.gridSelection) return;
+  const point = [Number(cell.dataset.row), Number(cell.dataset.col)];
+  if (state.gridSelection === "start") {
+    if (point.join(",") === state.grid.goal.join(",")) {
+      showToast("Choose a different square from the destination.");
+      return;
+    }
+    state.grid.start = point;
+    state.gridSelection = "goal";
+  } else {
+    if (point.join(",") === state.grid.start.join(",")) {
+      showToast("Choose a different square from the starting point.");
+      return;
+    }
+    state.grid.goal = point;
+    state.gridSelection = null;
+  }
+  state.lastGridResult = null;
+  updateGridSelectionHelp();
+  renderGridBoard();
+}
+
+function resetGridMap(randomizeSeed = true) {
+  const size = Number($("#grid-size").value);
+  state.grid.rows = size;
+  state.grid.cols = size;
+  state.grid.density = Number($("#grid-obstacles").value);
+  if (randomizeSeed) state.grid.seed = Math.floor(Math.random() * 2 ** 31);
+  state.grid.start = [0, 0];
+  state.grid.goal = [size - 1, size - 1];
+  state.grid.obstacles = [];
+  state.lastGridResult = null;
+  state.gridSelection = "start";
+  updateGridSelectionHelp();
+  $("#grid-results").innerHTML = "";
 }
 
 async function runGridSearch(event) {
-  event.preventDefault();
+  event?.preventDefault();
   const button = $("#grid-form button[type=submit]");
-  setBusy(button, true, "Searching…");
+  setBusy(button, true, "Finding route…");
   try {
     const result = await api("/api/search/grid", {
-      rows: Number($("#grid-rows").value),
-      cols: Number($("#grid-cols").value),
-      density: Number($("#grid-density").value),
-      seed: Number($("#grid-seed").value),
+      rows: state.grid.rows,
+      cols: state.grid.cols,
+      density: state.grid.density,
+      seed: state.grid.seed,
       algorithm: $("#grid-algorithm").value,
-      start: $("#grid-start").value,
-      goal: $("#grid-goal").value,
+      start: gridPositionName(state.grid.start),
+      goal: gridPositionName(state.grid.goal),
     });
+    state.grid.obstacles = result.obstacles;
     state.lastGridResult = result;
-    renderGridBoard(result);
+    renderGridBoard();
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -324,16 +462,16 @@ async function runGridSearch(event) {
 }
 
 function comparisonTable(results) {
-  const names = ["Path Cost", "Path Length", "Nodes Expanded", "Nodes Generated", "Runtime (ms)", "Heuristic"];
+  const names = ["Travel effort (path cost)", "Moves along route (path length)", "Places considered (expanded)", "Options added (generated)", "Computer time (ms)", "Distance estimate used"];
   const values = results.map((result) => [
     result.success ? formatNumber(result.path_cost) : "Unreachable",
     result.path_length,
     result.nodes_expanded,
     result.nodes_generated,
     formatNumber(result.execution_time_ms, 3),
-    result.heuristic_used || "None",
+    heuristicName(result.heuristic_used),
   ]);
-  return `<div class="table-wrap"><table><thead><tr><th>Metric</th>${results.map((result) => `<th>${escapeHtml(result.algorithm)}</th>`).join("")}</tr></thead>
+  return `<div class="table-wrap"><table><thead><tr><th>Metric</th>${results.map((result) => `<th>${escapeHtml(algorithmName(result.algorithm))}</th>`).join("")}</tr></thead>
     <tbody>${names.map((name, index) => `<tr><td>${name}</td>${values.map((column) => `<td>${escapeHtml(column[index])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -348,7 +486,7 @@ async function runComparison(event) {
     });
     $("#comparison-results").innerHTML = `
       <div class="card result-panel"><h3>Results on the same campus graph</h3>${comparisonTable(data.results)}</div>
-      ${data.results.map((result) => metricsMarkup(result, `${result.algorithm} route`)).join("")}`;
+      ${data.results.map((result) => metricsMarkup(result, `${algorithmName(result.algorithm)} route`)).join("")}`;
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -366,30 +504,32 @@ function drawBenchmarkChart(summary) {
   const colors = { BFS: "#537c68", Greedy: "#bd7b32", "A*": "#536b9b" };
   const barRows = rows.map((row, index) => {
     const y = 15 + index * rowHeight;
-    const label = `${row.scenario_name} · ${row.algorithm}`;
+    const label = `${scenarioName(row.scenario_name)} · ${algorithmShortName(row.algorithm)}`;
     const barWidth = Math.max(2, 330 * Number(row.mean_execution_time_ms) / maximum);
     return `<text x="0" y="${y + 14}" fill="#45544e" font-size="12">${escapeHtml(label)}</text>
       <rect x="255" y="${y}" width="${barWidth}" height="18" rx="3" fill="${colors[row.algorithm] || "#537c68"}"></rect>
       <text x="${Math.min(590, 263 + barWidth)}" y="${y + 14}" fill="#586861" font-size="11">${formatNumber(row.mean_execution_time_ms, 3)} ms</text>`;
   }).join("");
-  return `<div class="card result-panel"><h3>Mean search runtime</h3><p class="field-help">Lower is faster for these trials; timings vary between runs.</p>
+  return `<div class="card result-panel"><h3>Computer time by route finder</h3><p class="field-help">Shorter bars mean less search time; they do not necessarily mean a shorter route.</p>
     <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Average search runtime by scenario and algorithm">${barRows}</svg></div>`;
 }
 
 function renderBenchmarkResults(data) {
   const columns = ["scenario_name", "algorithm", "total_trials", "success_rate", "mean_execution_time_ms", "mean_nodes_expanded", "mean_nodes_generated", "mean_path_cost", "mean_path_length"];
-  const labels = ["Scenario", "Algorithm", "Trials", "Success rate", "Mean runtime (ms)", "Mean expanded", "Mean generated", "Mean path cost", "Mean path length"];
+  const labels = ["Map", "Route finder", "Repeated tries", "Searches finding a route", "Average computer time (ms)", "Average places considered", "Average options added", "Average travel effort", "Average moves"];
   const rows = data.summary.map((row) => `<tr>${columns.map((column, index) => {
     let value = row[column];
     if (column === "success_rate" && value !== null) value = `${(Number(value) * 100).toFixed(1)}%`;
     else if (column.startsWith("mean_") && value !== null) value = formatNumber(value, column.includes("time") ? 3 : 2);
+    else if (column === "algorithm") value = algorithmName(value);
+    else if (column === "scenario_name") value = scenarioName(value);
     return `<td>${escapeHtml(value ?? "—")}</td>`;
   }).join("")}</tr>`).join("");
   $("#benchmark-results").innerHTML = `
     ${drawBenchmarkChart(data.summary)}
-    <div class="card result-panel"><div class="card-heading"><div><h3>Summary statistics</h3><p>${data.scenarios.map(escapeHtml).join(" · ")}</p></div>
-      <div class="form-actions"><button class="button secondary" id="download-benchmark">Download raw CSV</button>
-      <button class="button secondary" id="download-benchmark-summary">Download summary CSV</button></div>
+    <div class="card result-panel"><div class="card-heading"><div><h3>Experiment results</h3><p>${data.scenarios.map((name) => escapeHtml(scenarioName(name))).join(" · ")}</p></div>
+      <div class="form-actions"><button class="button secondary" id="download-benchmark">Download all results (.csv)</button>
+      <button class="button secondary" id="download-benchmark-summary">Download averages (.csv)</button></div>
     </div>
     <div class="table-wrap"><table><thead><tr>${labels.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
   $("#download-benchmark").addEventListener("click", () => {
@@ -412,15 +552,16 @@ function downloadText(text, filename, type) {
 async function runBenchmarks(event) {
   event.preventDefault();
   const button = $("#benchmark-form button[type=submit]");
-  setBusy(button, true, "Running trials…");
+  setBusy(button, true, "Running experiment…");
   try {
     const suite = $("#benchmark-suite").value;
     const payload = { suite, trials: Number($("#benchmark-trials").value) };
     if (suite === "custom") {
-      payload.rows = Number($("#benchmark-rows").value);
-      payload.cols = Number($("#benchmark-cols").value);
-      payload.density = Number($("#benchmark-density").value);
-      payload.seed = Number($("#benchmark-seed").value);
+      const size = Number($("#benchmark-size").value);
+      payload.rows = size;
+      payload.cols = size;
+      payload.density = Number($("#benchmark-obstacles").value);
+      payload.seed = Math.floor(Math.random() * 2 ** 31);
     }
     const result = await api("/api/benchmarks", payload);
     renderBenchmarkResults(result);
@@ -455,6 +596,9 @@ function initialize(config) {
   $$("#blocked-options input").forEach((input, index) => { input.value = String(index); });
   candidateOptionsChanged();
   renderCampusMap();
+  updateGridSelectionHelp();
+  updateGridApproachHelp();
+  updateApproachHelp();
 
   $$(".nav-button").forEach((button) => button.addEventListener("click", () => switchPage(button.dataset.page)));
   $("#item-category").addEventListener("change", () => {
@@ -474,15 +618,40 @@ function initialize(config) {
   });
   $("#blocked-options").addEventListener("change", () => renderCampusMap());
   $("#belief-options").addEventListener("input", (event) => {
-    if (event.target.matches("input[type=range]")) event.target.nextElementSibling.value = Number(event.target.value).toFixed(2);
+    if (event.target.matches("input[type=range]")) {
+      event.target.nextElementSibling.value = `${Math.round(Number(event.target.value) * 100)}%`;
+    }
   });
   ["#current-location", "#last-seen"].forEach((selector) => $(selector).addEventListener("change", () => renderCampusMap()));
   $("#search-algorithm").addEventListener("change", () => {
     $("#search-heuristic").disabled = $("#search-algorithm").value === "bfs";
+    updateApproachHelp();
   });
   $("#plan-button").addEventListener("click", (event) => runCampusSearch("plan", event.currentTarget));
   $("#mission-button").addEventListener("click", (event) => runCampusSearch("mission", event.currentTarget));
   $("#grid-form").addEventListener("submit", runGridSearch);
+  $("#grid-map").addEventListener("click", selectGridPoint);
+  $$(".point-button").forEach((button) => button.addEventListener("click", () => {
+    state.gridSelection = button.dataset.point;
+    updateGridSelectionHelp();
+  }));
+  $("#grid-size").addEventListener("change", () => {
+    resetGridMap();
+    $("#grid-form").requestSubmit();
+  });
+  $("#grid-obstacles").addEventListener("change", () => {
+    resetGridMap();
+    $("#grid-form").requestSubmit();
+  });
+  $("#new-map-button").addEventListener("click", () => {
+    resetGridMap();
+    $("#grid-form").requestSubmit();
+  });
+  $("#grid-algorithm").addEventListener("change", () => {
+    state.lastGridResult = null;
+    updateGridApproachHelp();
+    renderGridBoard();
+  });
   $("#comparison-form").addEventListener("submit", runComparison);
   $("#benchmark-form").addEventListener("submit", runBenchmarks);
   $("#benchmark-suite").addEventListener("change", () => $("#custom-benchmark-fields").classList.toggle("hidden", $("#benchmark-suite").value !== "custom"));

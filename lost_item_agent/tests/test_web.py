@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,35 @@ def test_campus_search_rejects_empty_candidates_and_invalid_edges(client):
     assert "No campus corridor" in invalid_edge.json["error"]
 
 
+def test_api_http_errors_return_json_and_keep_status(client):
+    malformed_json = client.post(
+        "/api/search/campus",
+        data='{"start":',
+        content_type="application/json",
+    )
+    unsupported_media_type = client.post(
+        "/api/search/campus",
+        data="{}",
+        content_type="text/plain",
+    )
+
+    assert malformed_json.status_code == 400
+    assert malformed_json.is_json
+    assert malformed_json.json["status"] == 400
+    assert malformed_json.json["error"]
+    assert unsupported_media_type.status_code == 415
+    assert unsupported_media_type.is_json
+    assert unsupported_media_type.json["status"] == 415
+    assert unsupported_media_type.json["error"]
+
+
+def test_non_api_http_errors_keep_default_html_response(client):
+    response = client.get("/missing-page")
+
+    assert response.status_code == 404
+    assert not response.is_json
+
+
 def test_comparison_runs_all_algorithms_for_same_pair(client):
     response = client.post("/api/compare", json={
         "start": "Main Entrance",
@@ -146,3 +176,52 @@ def test_quick_benchmark_returns_summary_and_csv(client):
     assert data["raw_csv"].startswith("scenario_name,map_mode,grid_size,obstacle_density,algorithm,")
     assert data["summary_csv"].startswith("scenario_name,algorithm,total_trials")
     assert {"BFS", "Greedy", "A*"} == {row["algorithm"] for row in data["summary"]}
+
+
+def test_benchmark_endpoint_rejects_non_loopback_clients(client, monkeypatch):
+    def benchmark_must_not_run(_scenarios):
+        pytest.fail("Non-local client must not start a benchmark.")
+
+    monkeypatch.setattr("web.server._run_benchmarks_with_timeout", benchmark_must_not_run)
+    response = client.post(
+        "/api/benchmarks",
+        json={"suite": "fast", "trials": 1},
+        environ_overrides={"REMOTE_ADDR": "203.0.113.8"},
+    )
+
+    assert response.status_code == 403
+    assert response.is_json
+    assert response.json["status"] == 403
+
+
+def test_benchmark_endpoint_reports_timeout_as_gateway_timeout(client, monkeypatch):
+    def timed_out(_scenarios):
+        raise TimeoutError("Benchmark exceeded the test time limit.")
+
+    monkeypatch.setattr("web.server._run_benchmarks_with_timeout", timed_out)
+    response = client.post("/api/benchmarks", json={"suite": "fast", "trials": 1})
+
+    assert response.status_code == 504
+    assert response.is_json
+    assert "time limit" in response.json["error"]
+
+
+def test_benchmark_timeout_terminates_worker(monkeypatch):
+    import web.server as server_module
+    from benchmark.scenarios import BenchmarkScenario
+
+    monkeypatch.setattr(server_module, "BENCHMARK_TIMEOUT_SECONDS", 0.001)
+    scenario = BenchmarkScenario(
+        name="Timeout-test",
+        rows=50,
+        cols=50,
+        obstacle_density=0.2,
+        seed=1,
+        num_trials=10,
+    )
+    start = time.monotonic()
+
+    with pytest.raises(TimeoutError, match="time limit"):
+        server_module._run_benchmarks_with_timeout([scenario])
+
+    assert time.monotonic() - start < 5

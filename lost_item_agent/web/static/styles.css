@@ -196,20 +196,38 @@ td { color: #384641; }
 .muted { color: var(--muted); font-weight: 400; }
 .grid-form { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); align-items: end; gap: 12px; padding: 18px; }
 .grid-form label { margin: 0; }
-.grid-board { display: grid; gap: 2px; width: min(100%, 720px); margin: 16px auto 4px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #e8eeea; }
-.grid-cell { aspect-ratio: 1; min-width: 0; border-radius: 2px; background: #fff; }
+.grid-instructions { padding: 18px; margin-bottom: 14px; }
+.grid-instructions ol { margin: 8px 0 13px; padding-left: 22px; color: #45534f; }
+.grid-instructions li + li { margin-top: 4px; }
+.grid-instructions p { margin-bottom: 0; }
+.point-controls { display: flex; flex-wrap: wrap; gap: 7px; }
+.point-button.active { border-color: var(--green); background: var(--green-soft); color: var(--green-dark); }
+.selection-help { margin: 0; padding: 0 18px 14px; }
+.practice-map { overflow: hidden; padding-bottom: 8px; }
+.grid-board { display: grid; gap: 2px; width: min(100%, 720px); margin: 8px auto 4px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: #e8eeea; }
+.grid-cell { min-width: 0; min-height: 0; padding: 0; aspect-ratio: 1; border: 0; border-radius: 2px; background: #fff; }
+.grid-cell:focus-visible { position: relative; z-index: 1; outline: 3px solid #213f34; outline-offset: 1px; }
+.grid-cell:disabled { cursor: not-allowed; }
 .grid-cell.obstacle { background: #77837d; }
 .grid-cell.path { background: #a6d2bb; }
 .grid-cell.explored { background: #e3eee7; }
 .grid-cell.start { outline: 2px solid #236b57; outline-offset: -2px; background: #55a17b; }
 .grid-cell.goal { outline: 2px solid #bd7b32; outline-offset: -2px; background: #e8b467; }
 .grid-cell.start.goal { background: #6c8d72; }
+.explanation-disclosure { margin: 10px 0 0; }
+.explanation-disclosure summary, .methodology-details summary { color: #355c4e; font-weight: 700; cursor: pointer; }
+.explanation-disclosure p { margin: 7px 0 0; }
+.methodology-details { grid-column: 1 / -1; padding: 18px; }
+.methodology-details[open] > summary { margin-bottom: 14px; }
+.inner-method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .comparison-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; padding: 18px; }
 .comparison-form label { margin: 0; }
 .benchmark-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; padding: 18px 18px 10px; }
 .benchmark-form label { margin: 0; }
 .benchmark-form > .form-row { grid-column: 1 / -1; }
 .benchmark-form > .field-help { grid-column: 1 / -1; margin: 0; }
+.benchmark-note { margin: 0; padding: 0 18px 15px; }
+.comparison-note { margin: 0; padding: 14px 18px 0; }
 .chart { width: 100%; min-height: 220px; }
 .method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .method-grid .card { padding: 18px; }
@@ -236,6 +254,6 @@ td { color: #384641; }
   .page-header { padding-bottom: 20px; }.section-heading { display: block; }.section-heading > p { margin-top: 7px; text-align: left; }
   .form-card { padding: 15px; }.form-row, .grid-form, .comparison-form, .benchmark-form { grid-template-columns: 1fr 1fr; }
   .grid-form .button, .comparison-form .button, .benchmark-form .button { grid-column: 1 / -1; }
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }.method-grid { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }.method-grid, .inner-method-grid { grid-template-columns: 1fr; }
   .method-grid dl { grid-template-columns: 95px 1fr; }.map-frame { min-height: 290px; padding: 2px; }
 }

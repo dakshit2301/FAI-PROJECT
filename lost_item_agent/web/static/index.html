@@ -18,11 +18,11 @@
       <p class="sidebar-caption">Foundation of AI<br>Campus search simulation</p>
       <span class="nav-label">Project sections</span>
       <nav class="primary-nav" aria-label="Project sections">
-        <button class="nav-button active" data-page="search">Search workspace</button>
-        <button class="nav-button" data-page="grid">Grid search</button>
-        <button class="nav-button" data-page="comparison">Algorithm comparison</button>
-        <button class="nav-button" data-page="benchmarks">Benchmarks</button>
-        <button class="nav-button" data-page="methodology">Methodology</button>
+        <button class="nav-button active" data-page="search">Find a lost item</button>
+        <button class="nav-button" data-page="grid">Practice with a map</button>
+        <button class="nav-button" data-page="comparison">Compare route finders</button>
+        <button class="nav-button" data-page="benchmarks">Try different maps</button>
+        <button class="nav-button" data-page="methodology">How it works</button>
       </nav>
       <div class="sidebar-foot">Local simulation · no real sensors</div>
     </aside>
@@ -32,20 +32,20 @@
         <div>
           <p class="eyebrow">FOUNDATION OF AI · APPLIED AGENT PROJECT</p>
           <h1>Lost Item Recovery Agent</h1>
-          <p class="lead">Compare transparent search strategies on a simulated campus graph and obstacle grid.</p>
+          <p class="lead">Describe what you lost and where you have been. The agent will suggest places to check and show a route.</p>
         </div>
       </header>
 
       <section class="page-section active" id="page-search">
         <div class="section-heading">
-          <div><p class="eyebrow">CAMPUS GRAPH</p><h2>Search workspace</h2></div>
-          <p>Set the search context, inspect likely locations, and plan a route.</p>
+          <div><p class="eyebrow">CAMPUS LOST-AND-FOUND SIMULATION</p><h2>Find an item</h2></div>
+          <p>Fill in what you remember. You do not need to know how the search algorithm works.</p>
         </div>
         <div class="workspace-grid">
           <div class="card form-card">
             <form id="search-form">
               <div class="form-section">
-                <h3>Search details</h3>
+                <h3>1. Tell us what happened</h3>
                 <label>What did you lose?
                   <select id="item-category"></select>
                 </label>
@@ -62,58 +62,64 @@
                 </div>
               </div>
               <div class="form-section">
-                <h3>Likely places to search</h3>
-                <p class="field-help">Suggestions depend on the item; add other places if needed.</p>
+                <h3>2. Places worth checking</h3>
+                <p class="field-help">We suggest places based on your item. Check or uncheck any place to change the list.</p>
                 <div id="candidate-options" class="check-list"></div>
               </div>
               <div class="form-section">
-                <h3>Places visited since last seen</h3>
+                <h3>Places you visited afterward <span class="muted">(optional)</span></h3>
+                <p class="field-help">Include places you passed through. The simulation adds them to the search list.</p>
                 <div id="visited-options" class="check-list compact"></div>
               </div>
               <details class="form-section disclosure">
-                <summary>Adjust location beliefs</summary>
-                <p class="field-help">Manual beliefs only; these values are not learned by the system.</p>
+                <summary>Give some places more priority <span class="muted">(optional)</span></summary>
+                <p class="field-help">If you have a hunch, move its slider higher. These are your guesses, not learned predictions.</p>
                 <div id="belief-options" class="belief-list"></div>
               </details>
               <details class="form-section disclosure">
-                <summary>Simulate blocked corridors</summary>
-                <p class="field-help">Blocked passages are removed from the graph for this run.</p>
+                <summary>Try the map with a closed passage <span class="muted">(optional demo)</span></summary>
+                <p class="field-help">Choose a passage that cannot be used, for example because it is closed. The route will go around it.</p>
                 <div id="blocked-options" class="check-list compact"></div>
               </details>
               <div class="form-section">
-                <h3>Search method</h3>
+                <h3>3. Choose how to find a route</h3>
                 <div class="form-row">
-                  <label>Algorithm
+                  <label>Route-finding approach
                     <select id="search-algorithm">
-                      <option value="astar">A* Search</option>
-                      <option value="bfs">Breadth-First Search (BFS)</option>
-                      <option value="greedy">Greedy Best-First Search</option>
+                      <option value="astar">Balanced route (A*)</option>
+                      <option value="bfs">Fewest steps (BFS)</option>
+                      <option value="greedy">Head toward the destination (Greedy)</option>
                     </select>
                   </label>
-                  <label>Heuristic
+                  <label id="search-heuristic-label">Distance estimate
                     <select id="search-heuristic">
-                      <option value="euclidean">Euclidean distance</option>
-                      <option value="none">Null heuristic</option>
+                      <option value="euclidean">Use a direct-distance estimate</option>
+                      <option value="none">Do not estimate ahead</option>
                     </select>
                   </label>
                 </div>
-                <label>Actual item location <span class="muted">(simulation truth)</span>
+                <p id="approach-help" class="field-help">Balanced route (A*) considers distance already travelled and distance left. This is the recommended choice.</p>
+              </div>
+              <details class="form-section disclosure">
+                <summary>Run a sample recovery <span class="muted">(demonstration)</span></summary>
+                <p class="field-help">To demonstrate recovery, choose a pretend place where the item is. This is only simulation information—the app cannot actually detect an item.</p>
+                <label>Assume the item is at
                   <select id="actual-location"></select>
                 </label>
-              </div>
+              </details>
               <div class="form-actions">
-                <button class="button primary" type="button" id="plan-button">Create search plan</button>
-                <button class="button secondary" type="button" id="mission-button">Simulate recovery mission</button>
+                <button class="button primary" type="button" id="plan-button">Show places to check</button>
+                <button class="button secondary" type="button" id="mission-button">Run sample recovery</button>
               </div>
             </form>
           </div>
           <div class="card map-card">
-            <div class="card-heading"><div><h3>Campus map</h3><p>Schematic layout · corridor weights are movement costs</p></div></div>
+            <div class="card-heading"><div><h3>Campus map</h3><p>See your location, the places to check, and the suggested route.</p></div></div>
             <div id="campus-map" class="map-frame" aria-live="polite"></div>
             <div class="map-legend">
               <span><i class="legend-dot current"></i>Current position</span>
               <span><i class="legend-dot last-seen"></i>Last seen</span>
-              <span><i class="legend-dot candidate"></i>Candidate</span>
+              <span><i class="legend-dot candidate"></i>Possible place</span>
               <span><i class="legend-dot recovered"></i>Recovered</span>
             </div>
           </div>
@@ -123,34 +129,49 @@
 
       <section class="page-section" id="page-grid">
         <div class="section-heading">
-          <div><p class="eyebrow">FOUR-DIRECTIONAL ENVIRONMENT</p><h2>Grid search</h2></div>
-          <p>Observe how obstacles affect the route and the amount of search work.</p>
+          <div><p class="eyebrow">TRY A ROUTE ON A SIMPLE MAP</p><h2>Practice with a map</h2></div>
+          <p>This is a small practice map, not a map of your campus. Choose where to begin and where to go by clicking the map.</p>
         </div>
-        <div class="card">
+        <div class="card grid-instructions">
+          <h3>How to use this map</h3>
+          <ol>
+            <li>Choose a map size and how many blocked spaces to include.</li>
+            <li>Click <strong>Choose start</strong>, then click a clear square.</li>
+            <li>Click <strong>Choose destination</strong>, then click another clear square.</li>
+            <li>Press <strong>Find a route</strong> to see how the agent travels around blocked spaces.</li>
+          </ol>
+          <p class="field-help">Green is the start, orange is the destination, light green is the route, and dark gray squares are blocked.</p>
+        </div>
+        <div class="card grid-controls">
           <form id="grid-form" class="grid-form">
-            <label>Rows<input id="grid-rows" type="number" min="5" max="50" value="15"></label>
-            <label>Columns<input id="grid-cols" type="number" min="5" max="50" value="15"></label>
-            <label>Obstacle density<input id="grid-density" type="number" min="0" max="0.4" step="0.05" value="0.15"></label>
-            <label>Random seed<input id="grid-seed" type="number" min="0" value="42"></label>
-            <label>Algorithm<select id="grid-algorithm"><option value="astar">A*</option><option value="bfs">BFS</option><option value="greedy">Greedy Best-First</option></select></label>
-            <label>Start cell<input id="grid-start" value="(0,0)"></label>
-            <label>Goal cell<input id="grid-goal" value="(14,14)"></label>
-            <button class="button primary" type="submit">Run grid search</button>
+            <label>Map size<select id="grid-size"><option value="8">Small</option><option value="10" selected>Medium</option><option value="12">Large</option></select></label>
+            <label>Blocked spaces<select id="grid-obstacles"><option value="0">None</option><option value="0.1">A few</option><option value="0.2" selected>Some</option><option value="0.35">Many</option></select></label>
+            <label>Route-finding approach<select id="grid-algorithm"><option value="astar">Balanced route (A*)</option><option value="bfs">Fewest steps (BFS)</option><option value="greedy">Head toward destination (Greedy)</option></select></label>
+            <div class="point-controls">
+              <button class="button secondary point-button active" type="button" data-point="start">Choose start</button>
+              <button class="button secondary point-button" type="button" data-point="goal">Choose destination</button>
+            </div>
+            <button class="button secondary" id="new-map-button" type="button">Make a new map</button>
+            <button class="button primary" type="submit">Find a route</button>
           </form>
+          <p id="grid-approach-help" class="field-help selection-help">Balanced route (A*) considers both the route so far and the distance left.</p>
+          <p id="grid-selection-help" class="field-help selection-help" aria-live="polite">Click a clear square to choose your starting point.</p>
         </div>
+        <div id="grid-map" class="card practice-map" aria-live="polite"></div>
         <div id="grid-results" class="results-area"></div>
       </section>
 
       <section class="page-section" id="page-comparison">
         <div class="section-heading">
-          <div><p class="eyebrow">SAME GRAPH, SAME PROBLEM</p><h2>Algorithm comparison</h2></div>
-          <p>Compare path cost, route length, search work, and measured runtime.</p>
+          <div><p class="eyebrow">A ROUTE-FINDING DEMONSTRATION</p><h2>Compare route finders</h2></div>
+          <p>See how three ways of finding a route behave between the same two campus places.</p>
         </div>
         <div class="card">
+          <p class="field-help comparison-note">All three route finders use the same start, destination, and campus layout. The table compares the routes they find and the amount of search each one does.</p>
           <form id="comparison-form" class="comparison-form">
-            <label>Start location<select id="compare-start"></select></label>
-            <label>Goal location<select id="compare-goal"></select></label>
-            <button class="button primary" type="submit">Compare algorithms</button>
+            <label>Start from<select id="compare-start"></select></label>
+            <label>Travel to<select id="compare-goal"></select></label>
+            <button class="button primary" type="submit">Compare routes</button>
           </form>
         </div>
         <div id="comparison-results" class="results-area"></div>
@@ -158,52 +179,40 @@
 
       <section class="page-section" id="page-benchmarks">
         <div class="section-heading">
-          <div><p class="eyebrow">REPEATABLE EXPERIMENTS</p><h2>Benchmarks</h2></div>
-          <p>Each algorithm receives the same generated map and start/goal pairs per trial.</p>
+          <div><p class="eyebrow">OPTIONAL PROJECT EXPERIMENT</p><h2>Try different maps</h2></div>
+          <p>Run the same route-finding approaches on sample maps. No technical setup is needed.</p>
         </div>
         <div class="card">
           <form id="benchmark-form" class="benchmark-form">
-            <label>Scenario suite<select id="benchmark-suite"><option value="fast">Quick suite</option><option value="standard">Standard scenarios</option><option value="custom">Custom grid</option></select></label>
-            <label>Trials per scenario<input id="benchmark-trials" type="number" min="1" max="10" value="3"></label>
+            <label>What would you like to try?<select id="benchmark-suite"><option value="fast">Quick demonstration · 3 sample layouts</option><option value="standard">Full experiment · 6 layouts, including larger grids</option><option value="custom">Choose my own map</option></select></label>
+            <label>How many repeated tries? <span class="muted">(more tries take longer)</span><select id="benchmark-trials"><option value="1">1 try</option><option value="3" selected>3 tries</option><option value="5">5 tries</option></select></label>
             <div id="custom-benchmark-fields" class="form-row hidden">
-              <label>Rows<input id="benchmark-rows" type="number" min="5" max="50" value="20"></label>
-              <label>Columns<input id="benchmark-cols" type="number" min="5" max="50" value="20"></label>
-              <label>Obstacle density<input id="benchmark-density" type="number" min="0" max="0.4" step="0.05" value="0.2"></label>
-              <label>Seed<input id="benchmark-seed" type="number" min="0" value="42"></label>
+              <label>Map size<select id="benchmark-size"><option value="8">Small</option><option value="10" selected>Medium</option><option value="12">Large</option></select></label>
+              <label>Blocked spaces<select id="benchmark-obstacles"><option value="0">None</option><option value="0.1">A few</option><option value="0.2" selected>Some</option><option value="0.35">Many</option></select></label>
             </div>
-            <button class="button primary" type="submit">Run benchmarks</button>
+            <button class="button primary" type="submit">Run the experiment</button>
           </form>
-          <p class="field-help">Runtime is measured by the search function and varies between runs.</p>
+          <p class="field-help benchmark-note">Each approach gets the same maps and destinations, so their results can be compared fairly. The whole run has a 30-second limit.</p>
         </div>
         <div id="benchmark-results" class="results-area"></div>
       </section>
 
       <section class="page-section" id="page-methodology">
         <div class="section-heading">
-          <div><p class="eyebrow">PROJECT FORMULATION</p><h2>Methodology</h2></div>
-          <p>The simulation demonstrates classical search and agent problem formulation.</p>
+          <div><p class="eyebrow">PLAIN-LANGUAGE GUIDE</p><h2>How it works</h2></div>
+          <p>Here is what the simulation does—and what it does not do.</p>
         </div>
         <div class="method-grid">
-          <article class="card"><h3>PEAS</h3><dl>
-            <dt>Performance</dt><dd>Reduce movement and inspection effort; record search work and runtime.</dd>
-            <dt>Environment</dt><dd>A weighted campus graph or an obstacle grid; blocked corridors can be simulated.</dd>
-            <dt>Actuators</dt><dd>Move through connected locations and inspect candidate rooms.</dd>
-            <dt>Sensors</dt><dd>Position, blocked passages, and item location are supplied simulation inputs—not real sensors.</dd>
-          </dl></article>
-          <article class="card"><h3>Problem formulation</h3><dl>
-            <dt>State</dt><dd>Current location and remaining candidate locations.</dd>
-            <dt>Actions</dt><dd>Move to a connected campus node or adjacent grid cell.</dd>
-            <dt>Transition</dt><dd>Follow an unblocked edge or enter a walkable neighboring cell.</dd>
-            <dt>Goal</dt><dd>Reach the designated location and inspect it successfully.</dd>
-            <dt>Cost</dt><dd>Sum of movement costs; room search effort is used in candidate ranking.</dd>
-          </dl></article>
-          <article class="card"><h3>Search algorithms</h3><dl>
-            <dt>BFS</dt><dd>FIFO frontier; minimizes edge count on unweighted graphs, not weighted cost.</dd>
-            <dt>Greedy</dt><dd>Prioritizes h(n); does not guarantee a lowest-cost path.</dd>
-            <dt>A*</dt><dd>Prioritizes g(n) + h(n); cost-optimal when the heuristic is admissible.</dd>
-            <dt>Heuristics</dt><dd>Euclidean distance for campus coordinates, Manhattan distance for four-direction grids, or zero.</dd>
-          </dl></article>
-          <article class="card"><h3>Candidate search</h3><p>Candidates are ranked using movement cost, room-search effort, and user-provided belief. The recommended multi-room tour uses a greedy nearest-neighbor approximation; it is not a guaranteed optimal TSP tour.</p><p>The selected actual item location is simulation truth, not a learned probability or sensor reading.</p></article>
+          <article class="card"><h3>What does the agent do?</h3><p>It takes your current location and a list of places you think you visited, then finds paths through a sample campus layout. When you run a recovery demonstration, it checks the places one by one and replans after each unsuccessful check.</p><p><strong>It cannot track a real person or detect a real item.</strong> The map and recovery result are simulated.</p></article>
+          <article class="card"><h3>How are places suggested?</h3><p>Item types start with a short list of plausible places. You can change the list. If you have a hunch, you may optionally say some places are more likely; the program uses your input, it does not learn from data.</p><p>The suggested visit order is a practical shortcut, not a promise of the single shortest tour.</p></article>
+          <article class="card"><h3>How does it find a route?</h3><p><strong>Balanced route:</strong> considers both distance already travelled and distance left. <strong>Fewest steps:</strong> prefers fewer connections. <strong>Head toward the destination:</strong> follows the closest-looking direction, but can take a longer way around obstacles.</p><p>For the project, these are A*, Breadth-First Search (BFS), and Greedy Best-First Search.</p></article>
+          <article class="card"><h3>What do the results mean?</h3><p><strong>Places checked:</strong> locations the route finder examined. <strong>Route length:</strong> number of moves. <strong>Travel cost:</strong> movement effort on the sample map. <strong>Time:</strong> computer time for the search, not walking time.</p><p>These measures show different things; a faster run does not automatically mean a shorter route.</p></article>
+          <details class="card methodology-details"><summary>Technical project terms (for coursework review)</summary><div class="method-grid inner-method-grid">
+            <article><h3>PEAS</h3><p><strong>Performance:</strong> reduce movement and inspection effort and record search work. <strong>Environment:</strong> a weighted campus graph or obstacle grid. <strong>Actuators:</strong> move through connections and inspect rooms. <strong>Sensors:</strong> all positions and simulation truth are user-provided inputs; no real sensors are integrated.</p></article>
+            <article><h3>Search formulation</h3><p><strong>State:</strong> current location and remaining candidates. <strong>Actions:</strong> move along an open connection. <strong>Goal:</strong> reach and inspect the designated location. <strong>Cost:</strong> sum of movement weights.</p></article>
+            <article><h3>Search properties</h3><p>BFS uses a FIFO queue; Greedy orders by h(n); A* orders by g(n) + h(n). A* is cost-optimal when its heuristic is admissible. Manhattan distance suits four-direction unit-cost grids; Euclidean distance is used on the campus graph.</p></article>
+            <article><h3>Candidate tour</h3><p>Candidate priority is (movement cost + room inspection effort) × (1 − user belief). Tour planning uses a greedy nearest-neighbor approximation, not an optimal TSP solution.</p></article>
+          </div></details>
         </div>
       </section>
       <footer class="site-footer">Local academic simulation · Search results are generated by the Python algorithms.</footer>

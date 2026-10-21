@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import math
+import multiprocessing
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from ipaddress import ip_address
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.exceptions import HTTPException, abort
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
@@ -29,6 +33,7 @@ from planner.candidate_planner import CandidatePlanner, CandidateResult, Mission
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
+BENCHMARK_TIMEOUT_SECONDS = 30
 
 MAP_LAYOUT: dict[str, tuple[float, float, str]] = {
     "Main Entrance": (1.0, 1.0, "Ground floor"),
@@ -59,6 +64,91 @@ HEURISTICS = {
     "manhattan": manhattan_distance,
     "none": null_heuristic,
 }
+
+
+def _run_benchmark_worker(scenarios: list[Any], sender: Any) -> None:
+    """Run benchmark and serialize its results in an isolated child process."""
+    try:
+        from benchmark.exporter import summarize
+        from benchmark.runner import BenchmarkRunner
+
+        raw = BenchmarkRunner(verbose=False).run_all(scenarios)
+        summary = summarize(raw)
+        sender.send({
+            "scenarios": [scenario.name for scenario in scenarios],
+            "summary": summary.astype(object).where(summary.notna(), None).to_dict("records"),
+            "raw_csv": raw.to_csv(index=False),
+            "summary_csv": summary.to_csv(index=False),
+        })
+    except Exception as error:
+        sender.send({"error": str(error)})
+    finally:
+        sender.close()
+
+
+def _run_benchmarks_with_timeout(scenarios: list[Any]) -> dict[str, Any]:
+    """Run benchmarks in a killable process, enforcing a hard wall-clock limit."""
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_run_benchmark_worker,
+        args=(scenarios, sender),
+        daemon=True,
+    )
+    deadline = time.monotonic() + BENCHMARK_TIMEOUT_SECONDS
+    process.start()
+    sender.close()
+
+    result = None
+    try:
+        while process.is_alive():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if receiver.poll(min(remaining, 0.05)):
+                result = receiver.recv()
+                break
+
+        if result is None and receiver.poll():
+            result = receiver.recv()
+
+        if result is None and process.is_alive():
+            process.terminate()
+            process.join(timeout=1)
+            if process.is_alive():
+                process.kill()
+                process.join()
+            raise TimeoutError(
+                f"Benchmark exceeded the {BENCHMARK_TIMEOUT_SECONDS}-second time limit."
+            )
+
+        process.join(timeout=max(0, deadline - time.monotonic()))
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=1)
+            if process.is_alive():
+                process.kill()
+                process.join()
+            raise TimeoutError(
+                f"Benchmark exceeded the {BENCHMARK_TIMEOUT_SECONDS}-second time limit."
+            )
+        if result is None:
+            raise RuntimeError("Benchmark worker exited without returning a result.")
+        if process.exitcode != 0 and "error" not in result:
+            raise RuntimeError(
+                f"Benchmark worker exited unexpectedly (code {process.exitcode})."
+            )
+        if "error" in result:
+            raise RuntimeError(f"Benchmark failed: {result['error']}")
+        return result
+    finally:
+        receiver.close()
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=1)
+            if process.is_alive():
+                process.kill()
+                process.join()
 
 
 def _required_text(data: dict[str, Any], name: str) -> str:
@@ -179,6 +269,16 @@ def _validate_probabilities(raw: Any, candidates: list[str]) -> dict[str, float]
 @app.errorhandler(ValueError)
 def handle_value_error(error: ValueError):
     return jsonify({"error": str(error)}), 400
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(error: HTTPException):
+    if request.path.startswith("/api/"):
+        return jsonify({
+            "error": error.description,
+            "status": error.code,
+        }), error.code
+    return error
 
 
 @app.get("/")
@@ -368,9 +468,14 @@ def _bounded_int(data: dict[str, Any], name: str, minimum: int, maximum: int) ->
 
 @app.post("/api/benchmarks")
 def run_benchmarks():
-    from benchmark.exporter import summarize
-    from benchmark.runner import BenchmarkRunner
     from benchmark.scenarios import FAST_SCENARIOS, SCENARIOS, BenchmarkScenario
+
+    try:
+        remote = ip_address(request.remote_addr)
+    except ValueError:
+        abort(403, description="Benchmarking is available only from localhost.")
+    if not remote.is_loopback:
+        abort(403, description="Benchmarking is available only from localhost.")
 
     data = request.get_json(silent=False)
     if not isinstance(data, dict):
@@ -407,14 +512,13 @@ def run_benchmarks():
         replace(scenario, num_trials=trials)
         for scenario in scenarios
     ]
-    raw = BenchmarkRunner(verbose=False).run_all(configured)
-    summary = summarize(raw)
-    return jsonify({
-        "scenarios": [scenario.name for scenario in configured],
-        "summary": summary.astype(object).where(summary.notna(), None).to_dict("records"),
-        "raw_csv": raw.to_csv(index=False),
-        "summary_csv": summary.to_csv(index=False),
-    })
+    try:
+        result = _run_benchmarks_with_timeout(configured)
+    except TimeoutError as error:
+        return jsonify({"error": str(error)}), 504
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 500
+    return jsonify(result)
 
 
 if __name__ == "__main__":

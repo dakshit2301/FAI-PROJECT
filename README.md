@@ -13,7 +13,8 @@ A Foundation of AI project that models searching for a misplaced item as pathfin
 - Algorithm comparison on the same campus start/goal pair.
 - Repeatable quick, standard, and configurable benchmark runs with summary metrics and raw CSV export.
 - Campus and grid route visualizations rendered in the browser.
-- A methodology section describing PEAS and the search problem formulation.
+- A plain-language interface, including a clickable practice map for choosing a start and destination.
+- An expandable coursework guide describing PEAS and the technical search problem formulation.
 
 The application is a simulation. The selected actual item location is simulation truth, not a real sensor or learned prediction. Candidate probabilities are supplied manually.
 
@@ -84,9 +85,9 @@ python app.py
 
 ## Benchmarks
 
-The quick suite contains small grids and the campus graph. Standard scenarios also vary grid size and obstacle density, including a 50×50 stress case. A custom grid can be configured in the website.
+The quick suite contains small grids and the campus graph. Standard scenarios also vary grid size and obstacle density, including a 50×50 stress case. The website presents these as a quick demonstration or full experiment, and offers simple size and obstacle choices for a custom grid.
 
-For each trial, the benchmark runner supplies the same map and start/goal pair to BFS, Greedy, and A*. It reports success, path cost/length, expanded/generated nodes, and search-function execution time. Seeds reproduce map generation and sampled pairs; runtime measurements vary. The website displays summary statistics and offers raw-trial CSV download.
+For each trial, the benchmark runner supplies the same map and start/goal pair to BFS, Greedy, and A*. It reports success, path cost/length, expanded/generated nodes, and search-function execution time. Seeds reproduce map generation and sampled pairs; runtime measurements vary. The website displays summary statistics and offers raw-trial CSV download. Website benchmark requests are restricted to localhost and have a 30-second execution limit.
 
 Memory usage and candidate-count benchmark sweeps are not currently part of the website benchmark workflow.
 

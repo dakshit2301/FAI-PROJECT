@@ -10,6 +10,9 @@ from __future__ import annotations
 import math
 import os
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -88,6 +91,63 @@ class TestBenchmarkScenarios:
 # ---------------------------------------------------------------------------
 
 class TestBenchmarkRunner:
+    def test_profiled_runs_serialize_tracemalloc(self, monkeypatch):
+        import benchmark.runner as runner_module
+        from environment.models import SearchResult
+
+        state_lock = threading.Lock()
+        tracing = False
+        overlapping_runs = False
+        reset_count = 0
+
+        class FakeTracemalloc:
+            def start(self):
+                nonlocal tracing, overlapping_runs
+                with state_lock:
+                    if tracing:
+                        overlapping_runs = True
+                    tracing = True
+
+            def reset_peak(self):
+                nonlocal reset_count
+                assert tracing
+                reset_count += 1
+
+            def get_traced_memory(self):
+                time.sleep(0.01)
+                return 0, 1024
+
+            def stop(self):
+                nonlocal tracing
+                with state_lock:
+                    tracing = False
+
+        def fake_search(*_args):
+            time.sleep(0.01)
+            return SearchResult(
+                algorithm="BFS",
+                start="start",
+                goal="goal",
+                success=True,
+            )
+
+        monkeypatch.setattr(runner_module, "tracemalloc", FakeTracemalloc())
+        monkeypatch.setattr(BenchmarkRunner, "_run_algorithm", staticmethod(fake_search))
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(executor.map(
+                lambda _: BenchmarkRunner._run_profiled_algorithm(
+                    "BFS", None, "start", "goal", None
+                ),
+                range(8),
+            ))
+
+        assert not overlapping_runs
+        assert not tracing
+        assert reset_count == 8
+        assert all(result.success for result, _ in results)
+        assert all(memory_kib == 1.0 for _, memory_kib in results)
+
     def test_run_single_trial(self):
         scenario = BenchmarkScenario(
             name="Tiny-Open",
