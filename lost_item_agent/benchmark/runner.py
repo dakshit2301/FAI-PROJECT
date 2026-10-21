@@ -10,7 +10,7 @@ Metric               Unit      Definition
 ────────────────────────────────────────────────────────────────────────────
 execution_time_ms    ms        Real wall-clock time around algorithm core
                                only (time.perf_counter).  Excludes I/O and
-                               Streamlit rendering.
+                               website rendering.
 nodes_expanded       count     Nodes popped from the frontier (main loop
                                iterations; a reopened A* state counts again).
 nodes_generated      count     Nodes pushed to the frontier (neighbours

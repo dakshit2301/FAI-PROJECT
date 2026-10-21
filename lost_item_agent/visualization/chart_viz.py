@@ -3,8 +3,8 @@ visualization/chart_viz.py
 --------------------------
 Matplotlib comparison charts for benchmark results.
 
-All functions return a ``matplotlib.figure.Figure`` object so the caller
-(Streamlit UI or tests) can display or save it independently.
+All functions return a ``matplotlib.figure.Figure`` object so callers can
+display or save charts independently.
 
 Chart catalogue
 ~~~~~~~~~~~~~~~
@@ -28,7 +28,7 @@ import math
 from typing import Optional
 
 import matplotlib
-matplotlib.use("Agg")   # non-interactive backend — safe for Streamlit & tests
+matplotlib.use("Agg")   # Non-interactive backend for tests and file output.
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np

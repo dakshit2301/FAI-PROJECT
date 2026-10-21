@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f3">
+  <title>Lost Item Recovery Agent</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Lost Item Recovery Agent home">
+        <span class="brand-mark">LR</span>
+        <span>Lost Item<br>Recovery Agent</span>
+      </a>
+      <p class="sidebar-caption">Foundation of AI<br>Campus search simulation</p>
+      <span class="nav-label">Project sections</span>
+      <nav class="primary-nav" aria-label="Project sections">
+        <button class="nav-button active" data-page="search">Search workspace</button>
+        <button class="nav-button" data-page="grid">Grid search</button>
+        <button class="nav-button" data-page="comparison">Algorithm comparison</button>
+        <button class="nav-button" data-page="benchmarks">Benchmarks</button>
+        <button class="nav-button" data-page="methodology">Methodology</button>
+      </nav>
+      <div class="sidebar-foot">Local simulation · no real sensors</div>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">FOUNDATION OF AI · APPLIED AGENT PROJECT</p>
+          <h1>Lost Item Recovery Agent</h1>
+          <p class="lead">Compare transparent search strategies on a simulated campus graph and obstacle grid.</p>
+        </div>
+      </header>
+
+      <section class="page-section active" id="page-search">
+        <div class="section-heading">
+          <div><p class="eyebrow">CAMPUS GRAPH</p><h2>Search workspace</h2></div>
+          <p>Set the search context, inspect likely locations, and plan a route.</p>
+        </div>
+        <div class="workspace-grid">
+          <div class="card form-card">
+            <form id="search-form">
+              <div class="form-section">
+                <h3>Search details</h3>
+                <label>What did you lose?
+                  <select id="item-category"></select>
+                </label>
+                <label id="custom-item-wrap" class="hidden">Describe the item
+                  <input id="custom-item" type="text" placeholder="e.g. blue water bottle">
+                </label>
+                <div class="form-row">
+                  <label>Where did you last see it?
+                    <select id="last-seen"></select>
+                  </label>
+                  <label>Where are you now?
+                    <select id="current-location"></select>
+                  </label>
+                </div>
+              </div>
+              <div class="form-section">
+                <h3>Likely places to search</h3>
+                <p class="field-help">Suggestions depend on the item; add other places if needed.</p>
+                <div id="candidate-options" class="check-list"></div>
+              </div>
+              <div class="form-section">
+                <h3>Places visited since last seen</h3>
+                <div id="visited-options" class="check-list compact"></div>
+              </div>
+              <details class="form-section disclosure">
+                <summary>Adjust location beliefs</summary>
+                <p class="field-help">Manual beliefs only; these values are not learned by the system.</p>
+                <div id="belief-options" class="belief-list"></div>
+              </details>
+              <details class="form-section disclosure">
+                <summary>Simulate blocked corridors</summary>
+                <p class="field-help">Blocked passages are removed from the graph for this run.</p>
+                <div id="blocked-options" class="check-list compact"></div>
+              </details>
+              <div class="form-section">
+                <h3>Search method</h3>
+                <div class="form-row">
+                  <label>Algorithm
+                    <select id="search-algorithm">
+                      <option value="astar">A* Search</option>
+                      <option value="bfs">Breadth-First Search (BFS)</option>
+                      <option value="greedy">Greedy Best-First Search</option>
+                    </select>
+                  </label>
+                  <label>Heuristic
+                    <select id="search-heuristic">
+                      <option value="euclidean">Euclidean distance</option>
+                      <option value="none">Null heuristic</option>
+                    </select>
+                  </label>
+                </div>
+                <label>Actual item location <span class="muted">(simulation truth)</span>
+                  <select id="actual-location"></select>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="button primary" type="button" id="plan-button">Create search plan</button>
+                <button class="button secondary" type="button" id="mission-button">Simulate recovery mission</button>
+              </div>
+            </form>
+          </div>
+          <div class="card map-card">
+            <div class="card-heading"><div><h3>Campus map</h3><p>Schematic layout · corridor weights are movement costs</p></div></div>
+            <div id="campus-map" class="map-frame" aria-live="polite"></div>
+            <div class="map-legend">
+              <span><i class="legend-dot current"></i>Current position</span>
+              <span><i class="legend-dot last-seen"></i>Last seen</span>
+              <span><i class="legend-dot candidate"></i>Candidate</span>
+              <span><i class="legend-dot recovered"></i>Recovered</span>
+            </div>
+          </div>
+        </div>
+        <div id="search-results" class="results-area"></div>
+      </section>
+
+      <section class="page-section" id="page-grid">
+        <div class="section-heading">
+          <div><p class="eyebrow">FOUR-DIRECTIONAL ENVIRONMENT</p><h2>Grid search</h2></div>
+          <p>Observe how obstacles affect the route and the amount of search work.</p>
+        </div>
+        <div class="card">
+          <form id="grid-form" class="grid-form">
+            <label>Rows<input id="grid-rows" type="number" min="5" max="50" value="15"></label>
+            <label>Columns<input id="grid-cols" type="number" min="5" max="50" value="15"></label>
+            <label>Obstacle density<input id="grid-density" type="number" min="0" max="0.4" step="0.05" value="0.15"></label>
+            <label>Random seed<input id="grid-seed" type="number" min="0" value="42"></label>
+            <label>Algorithm<select id="grid-algorithm"><option value="astar">A*</option><option value="bfs">BFS</option><option value="greedy">Greedy Best-First</option></select></label>
+            <label>Start cell<input id="grid-start" value="(0,0)"></label>
+            <label>Goal cell<input id="grid-goal" value="(14,14)"></label>
+            <button class="button primary" type="submit">Run grid search</button>
+          </form>
+        </div>
+        <div id="grid-results" class="results-area"></div>
+      </section>
+
+      <section class="page-section" id="page-comparison">
+        <div class="section-heading">
+          <div><p class="eyebrow">SAME GRAPH, SAME PROBLEM</p><h2>Algorithm comparison</h2></div>
+          <p>Compare path cost, route length, search work, and measured runtime.</p>
+        </div>
+        <div class="card">
+          <form id="comparison-form" class="comparison-form">
+            <label>Start location<select id="compare-start"></select></label>
+            <label>Goal location<select id="compare-goal"></select></label>
+            <button class="button primary" type="submit">Compare algorithms</button>
+          </form>
+        </div>
+        <div id="comparison-results" class="results-area"></div>
+      </section>
+
+      <section class="page-section" id="page-benchmarks">
+        <div class="section-heading">
+          <div><p class="eyebrow">REPEATABLE EXPERIMENTS</p><h2>Benchmarks</h2></div>
+          <p>Each algorithm receives the same generated map and start/goal pairs per trial.</p>
+        </div>
+        <div class="card">
+          <form id="benchmark-form" class="benchmark-form">
+            <label>Scenario suite<select id="benchmark-suite"><option value="fast">Quick suite</option><option value="standard">Standard scenarios</option><option value="custom">Custom grid</option></select></label>
+            <label>Trials per scenario<input id="benchmark-trials" type="number" min="1" max="10" value="3"></label>
+            <div id="custom-benchmark-fields" class="form-row hidden">
+              <label>Rows<input id="benchmark-rows" type="number" min="5" max="50" value="20"></label>
+              <label>Columns<input id="benchmark-cols" type="number" min="5" max="50" value="20"></label>
+              <label>Obstacle density<input id="benchmark-density" type="number" min="0" max="0.4" step="0.05" value="0.2"></label>
+              <label>Seed<input id="benchmark-seed" type="number" min="0" value="42"></label>
+            </div>
+            <button class="button primary" type="submit">Run benchmarks</button>
+          </form>
+          <p class="field-help">Runtime is measured by the search function and varies between runs.</p>
+        </div>
+        <div id="benchmark-results" class="results-area"></div>
+      </section>
+
+      <section class="page-section" id="page-methodology">
+        <div class="section-heading">
+          <div><p class="eyebrow">PROJECT FORMULATION</p><h2>Methodology</h2></div>
+          <p>The simulation demonstrates classical search and agent problem formulation.</p>
+        </div>
+        <div class="method-grid">
+          <article class="card"><h3>PEAS</h3><dl>
+            <dt>Performance</dt><dd>Reduce movement and inspection effort; record search work and runtime.</dd>
+            <dt>Environment</dt><dd>A weighted campus graph or an obstacle grid; blocked corridors can be simulated.</dd>
+            <dt>Actuators</dt><dd>Move through connected locations and inspect candidate rooms.</dd>
+            <dt>Sensors</dt><dd>Position, blocked passages, and item location are supplied simulation inputs—not real sensors.</dd>
+          </dl></article>
+          <article class="card"><h3>Problem formulation</h3><dl>
+            <dt>State</dt><dd>Current location and remaining candidate locations.</dd>
+            <dt>Actions</dt><dd>Move to a connected campus node or adjacent grid cell.</dd>
+            <dt>Transition</dt><dd>Follow an unblocked edge or enter a walkable neighboring cell.</dd>
+            <dt>Goal</dt><dd>Reach the designated location and inspect it successfully.</dd>
+            <dt>Cost</dt><dd>Sum of movement costs; room search effort is used in candidate ranking.</dd>
+          </dl></article>
+          <article class="card"><h3>Search algorithms</h3><dl>
+            <dt>BFS</dt><dd>FIFO frontier; minimizes edge count on unweighted graphs, not weighted cost.</dd>
+            <dt>Greedy</dt><dd>Prioritizes h(n); does not guarantee a lowest-cost path.</dd>
+            <dt>A*</dt><dd>Prioritizes g(n) + h(n); cost-optimal when the heuristic is admissible.</dd>
+            <dt>Heuristics</dt><dd>Euclidean distance for campus coordinates, Manhattan distance for four-direction grids, or zero.</dd>
+          </dl></article>
+          <article class="card"><h3>Candidate search</h3><p>Candidates are ranked using movement cost, room-search effort, and user-provided belief. The recommended multi-room tour uses a greedy nearest-neighbor approximation; it is not a guaranteed optimal TSP tour.</p><p>The selected actual item location is simulation truth, not a learned probability or sensor reading.</p></article>
+        </div>
+      </section>
+      <footer class="site-footer">Local academic simulation · Search results are generated by the Python algorithms.</footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

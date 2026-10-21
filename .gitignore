@@ -14,9 +14,6 @@ env/
 .venv/
 ENV/
 
-# Streamlit run data & logs
-.streamlit/secrets.toml
-
 # IDE and OS files
 .vscode/
 .idea/
