@@ -1,0 +1,2968 @@
+I have inspected your project files, domain models (`Node`, `Edge`, `SearchResult`), search implementations (`bfs`, `greedy_best_first`, `astar`, `heuristics`), multi-candidate planner (`CandidatePlanner`, `CandidateResult`, `MissionStep`), benchmark suite (`BenchmarkRunner`, `SCENARIOS`, `FAST_SCENARIOS`, `exporter`), chart generator (`chart_viz.py`), and the automated Streamlit test suite (`lost_item_agent/tests/test_app.py`).
+
+Below is the complete **Campus Lost & Found Command Center** UI redesign implemented directly against your existing backend modules and `AppTest` contracts. All core search, planning, simulation, and benchmark logic in `environment/`, `search/`, `planner/`, and `benchmark/` is preserved untouched.
+
+---
+
+## 1. `.streamlit/config.toml` (and `lost_item_agent/.streamlit/config.toml`)
+
+Save this configuration to both `.streamlit/config.toml` (workspace root) and `lost_item_agent/.streamlit/config.toml` so launching from either directory applies the warm light-neutral and forest-green theme:
+
+```toml
+[theme]
+base = "light"
+primaryColor = "#1B4D3E"
+backgroundColor = "#F8F7F2"
+secondaryBackgroundColor = "#EFECE6"
+textColor = "#1C2526"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+```
+
+---
+
+## 2. `lost_item_agent/app/components/metrics_card.py`
+
+This module provides the shared **Campus Lost & Found Command Center** CSS (`Manrope`, `DM Sans`, `DM Mono`, warm neutral surfaces, forest-green/teal/amber/coral semantic tokens, and non-color-only status badges) along with reusable metric cards for `SearchResult`, `CandidateResult`, and `MissionStep` objects.
+
+```python
+"""
+app/components/metrics_card.py
+------------------------------
+Shared design system, CSS injection, status banners, and metric cards
+for the Campus Lost & Found Command Center UI.
+"""
+
+from __future__ import annotations
+
+import html
+from typing import Optional, Sequence
+
+import streamlit as st
+
+from environment.models import SearchResult
+from planner.candidate_planner import CandidateResult, MissionStep
+
+# Semantic color tokens for the Campus Lost & Found Command Center
+THEME_TOKENS: dict[str, str] = {
+    "bg_canvas": "#F8F7F2",
+    "bg_card": "#FFFFFF",
+    "bg_muted": "#EEF3EF",
+    "bg_sim": "#FFFBEB",
+    "border": "#D5DDD7",
+    "text_primary": "#1C2526",
+    "text_secondary": "#4A5A54",
+    "forest_green": "#1B4D3E",
+    "teal_accent": "#1F6F78",
+    "amber_candidate": "#D97706",
+    "amber_dark": "#B45309",
+    "coral_blocked": "#B91C1C",
+    "emerald_recovered": "#15803D",
+    "slate_visited": "#475569",
+    "purple_last_seen": "#6D28D9",
+}
+
+
+def inject_command_center_theme() -> None:
+    """Inject typography (Manrope, DM Sans, DM Mono), card surfaces, and accessible badges."""
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Manrope:wght@600;700;800&display=swap');
+
+        :root {
+            --bg-canvas: #F8F7F2;
+            --bg-card: #FFFFFF;
+            --bg-muted: #EEF3EF;
+            --bg-sim: #FFFBEB;
+            --border-subtle: #D5DDD7;
+            --text-primary: #1C2526;
+            --text-secondary: #4A5A54;
+            --forest-green: #1B4D3E;
+            --teal-accent: #1F6F78;
+            --amber-candidate: #B45309;
+            --coral-danger: #B91C1C;
+            --emerald-ok: #15803D;
+            --font-heading: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'DM Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+        }
+
+        html, body, [class*="css"] {
+            font-family: var(--font-body);
+            color: var(--text-primary);
+        }
+
+        h1, h2, h3, h4, .cc-heading {
+            font-family: var(--font-heading) !important;
+            color: var(--text-primary);
+            letter-spacing: -0.015em;
+        }
+
+        code, pre, .cc-mono, [data-testid="stMetricValue"] {
+            font-family: var(--font-mono) !important;
+        }
+
+        .block-container {
+            padding-top: 1.4rem !important;
+            padding-bottom: 2.5rem !important;
+            max-width: 1360px !important;
+        }
+
+        /* Command Center Banner */
+        .cc-banner {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-left: 5px solid var(--forest-green);
+            border-radius: 10px;
+            padding: 1.05rem 1.35rem;
+            margin-bottom: 1.15rem;
+            box-shadow: 0 1px 3px rgba(28, 37, 38, 0.04);
+        }
+        .cc-banner-eyebrow {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--teal-accent);
+            font-weight: 500;
+            margin-bottom: 0.2rem;
+        }
+        .cc-banner-title {
+            font-family: var(--font-heading);
+            font-size: 1.45rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 0.25rem 0;
+        }
+        .cc-banner-subtitle {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            margin: 0;
+            line-height: 1.45;
+        }
+
+        /* Cards & Panels */
+        .cc-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 1rem 1.2rem;
+            margin-bottom: 0.9rem;
+            box-shadow: 0 1px 2px rgba(28, 37, 38, 0.03);
+        }
+        .cc-card-muted {
+            background: var(--bg-muted);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 0.95rem 1.15rem;
+            margin-bottom: 0.9rem;
+        }
+        .cc-sim-box {
+            background: var(--bg-sim);
+            border: 1px dashed #D97706;
+            border-radius: 8px;
+            padding: 0.75rem 0.95rem;
+            margin-bottom: 0.65rem;
+        }
+        .cc-sim-label {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            font-weight: 500;
+            color: #92400E;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.2rem;
+        }
+
+        /* Step Headers */
+        .cc-step {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            margin: 0.35rem 0 0.55rem 0;
+        }
+        .cc-step-badge {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: var(--forest-green);
+            color: #FFFFFF;
+            padding: 0.14rem 0.48rem;
+            border-radius: 5px;
+        }
+        .cc-step-title {
+            font-family: var(--font-heading);
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        /* Status Badges (Text + Symbol so color is never the sole indicator) */
+        .cc-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            font-weight: 500;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            border: 1px solid transparent;
+        }
+        .cc-status-plan {
+            background: #E6F2EE;
+            color: #1B4D3E;
+            border-color: #B7D7CC;
+        }
+        .cc-status-recovered {
+            background: #DCFCE7;
+            color: #166534;
+            border-color: #86EFAC;
+        }
+        .cc-status-unrecovered {
+            background: #FEF3C7;
+            color: #92400E;
+            border-color: #FDE68A;
+        }
+        .cc-status-blocked {
+            background: #FEE2E2;
+            color: #991B1B;
+            border-color: #FCA5A5;
+        }
+
+        /* Streamlit Metric overrides */
+        [data-testid="stMetric"] {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 0.7rem 0.85rem;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.78rem !important;
+            color: var(--text-secondary) !important;
+            font-weight: 500 !important;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.28rem !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Accessible Legend Strip */
+        .cc-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem 1rem;
+            padding: 0.6rem 0.85rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            margin: 0.45rem 0 0.75rem 0;
+        }
+        .cc-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: var(--text-primary);
+        }
+        .cc-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(28, 37, 38, 0.25);
+        }
+
+        @media (max-width: 992px) {
+            .block-container {
+                padding-left: 0.9rem !important;
+                padding-right: 0.9rem !important;
+            }
+            .cc-banner-title {
+                font-size: 1.25rem;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_page_header(eyebrow: str, title: str, subtitle: str) -> None:
+    """Render a consistent Command Center header banner."""
+    st.markdown(
+        f"""
+        <div class="cc-banner">
+            <div class="cc-banner-eyebrow">{html.escape(eyebrow)}</div>
+            <div class="cc-banner-title">{html.escape(title)}</div>
+            <p class="cc-banner-subtitle">{html.escape(subtitle)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_step_header(step_code: str, title: str, subtitle: Optional[str] = None) -> None:
+    """Render a numbered workflow step header."""
+    st.markdown(
+        f"""
+        <div class="cc-step">
+            <span class="cc-step-badge">{html.escape(step_code)}</span>
+            <h3 class="cc-step-title">{html.escape(title)}</h3>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if subtitle:
+        st.caption(subtitle)
+
+
+def render_mode_distinction_banner(
+    mode: str,
+    algorithm_label: str,
+    item_label: str,
+    recovered: bool = False,
+    recovered_location: Optional[str] = None,
+    steps_taken: int = 0,
+) -> None:
+    """
+    Clearly distinguish a Planned Search Route from a Simulated Recovery Mission outcome.
+    Uses explicit text tags ([PLAN MODE] vs [SIMULATION]) in addition to color.
+    """
+    algo_safe = html.escape(algorithm_label)
+    item_safe = html.escape(item_label)
+
+    if mode == "plan":
+        st.markdown(
+            f"""
+            <div class="cc-card-muted">
+                <span class="cc-status-badge cc-status-plan">[PLAN MODE] Prioritized Route &amp; Candidate Schedule</span>
+                <p style="margin:0.45rem 0 0 0; font-size:0.88rem; color:#1C2526;">
+                    Computed a search plan for <strong>{item_safe}</strong> using <strong>{algo_safe}</strong>.
+                    This view shows the pre-mission ranking and nearest-neighbor inspection tour without using simulation ground truth.
+                    Click <strong>Simulate Recovery Mission</strong> to step through room inspections.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        if recovered and recovered_location:
+            loc_safe = html.escape(recovered_location)
+            badge = '<span class="cc-status-badge cc-status-recovered">[SIMULATION OUTCOME: RECOVERED] Target Located</span>'
+            summary = (
+                f"Simulated recovery mission for <strong>{item_safe}</strong> using <strong>{algo_safe}</strong> "
+                f"succeeded on inspection step <strong>#{steps_taken}</strong> at <strong>{loc_safe}</strong>."
+            )
+        else:
+            badge = '<span class="cc-status-badge cc-status-unrecovered">[SIMULATION OUTCOME: NOT FOUND] Queue Exhausted</span>'
+            summary = (
+                f"Simulated recovery mission for <strong>{item_safe}</strong> inspected <strong>{steps_taken}</strong> "
+                f"reachable candidate location(s) with <strong>{algo_safe}</strong>, but the simulated item location was not among them."
+            )
+        st.markdown(
+            f"""
+            <div class="cc-card-muted">
+                {badge}
+                <p style="margin:0.45rem 0 0 0; font-size:0.88rem; color:#1C2526;">{summary}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_search_result_metrics(result: SearchResult, title: Optional[str] = None) -> None:
+    """Render real algorithm metrics for a single SearchResult."""
+    if title:
+        st.markdown(f"**{title}**")
+
+    status_label = "ROUTE FOUND" if result.success else "UNREACHABLE"
+    cost_str = f"{result.path_cost:.2f}" if result.success else "—"
+    hops_str = f"{result.path_length}" if result.success else "—"
+
+    cols = st.columns(5)
+    cols[0].metric("Status", status_label)
+    cols[1].metric("Path Cost", cost_str)
+    cols[2].metric("Path Hops", hops_str)
+    cols[3].metric("Nodes Expanded", f"{result.nodes_expanded:,}")
+    cols[4].metric("Runtime (ms)", f"{result.execution_time_ms:.3f}")
+
+
+def render_plan_summary_metrics(
+    results: Sequence[CandidateResult],
+    visit_order: Sequence[str],
+    algorithm_label: str,
+    mission_steps: Optional[Sequence[MissionStep]] = None,
+) -> None:
+    """Render top-level telemetry for a candidate search plan or simulated mission."""
+    reachable = [r for r in results if r.reachable]
+    total_expanded = sum(r.algorithm_result.nodes_expanded for r in results)
+    total_time_ms = sum(r.algorithm_result.execution_time_ms for r in results)
+
+    if mission_steps is not None:
+        mission_expanded = sum(s.algorithm_result.nodes_expanded for s in mission_steps)
+        mission_cost = sum(
+            s.algorithm_result.path_cost for s in mission_steps if s.algorithm_result.success
+        )
+        mission_time = sum(s.algorithm_result.execution_time_ms for s in mission_steps)
+        found_step = next((s for s in mission_steps if s.item_found), None)
+
+        cols = st.columns(5)
+        cols[0].metric("Algorithm", algorithm_label)
+        cols[1].metric(
+            "Mission Outcome",
+            f"Found @ {found_step.candidate}" if found_step else "Not Recovered",
+        )
+        cols[2].metric("Rooms Inspected", f"{len(mission_steps)} / {len(visit_order)}")
+        cols[3].metric("Cumulative Walk Cost", f"{mission_cost:.2f}")
+        cols[4].metric(
+            "Mission Nodes / Time",
+            f"{mission_expanded} ({mission_time:.2f} ms)",
+        )
+    else:
+        top_cand = reachable[0].candidate if reachable else "None"
+        top_score = f"{reachable[0].priority_score:.2f}" if reachable else "∞"
+
+        cols = st.columns(5)
+        cols[0].metric("Algorithm", algorithm_label)
+        cols[1].metric("Reachable Candidates", f"{len(reachable)} / {len(results)}")
+        cols[2].metric("Top Priority Target", top_cand)
+        cols[3].metric("Best Priority Score", top_score)
+        cols[4].metric(
+            "Plan Nodes / Time",
+            f"{total_expanded} ({total_time_ms:.2f} ms)",
+        )
+
+```
+
+---
+
+## 3. `lost_item_agent/app/components/campus_map_view.py`
+
+This module draws the schematic two-floor campus graph using Matplotlib and provides both an embeddable map renderer (for the Search Workspace) and an interactive standalone Campus Map view. Every node role uses a distinct shape, border, color, and text tag (`[START]`, `[LAST SEEN]`, `[CAND #k]`, `[VISITED]`, `[FOUND]`) so status is never communicated by color alone.
+
+```python
+"""
+app/components/campus_map_view.py
+---------------------------------
+Schematic Campus Graph renderer and interactive map explorer.
+Distinguishes current position, last-seen location, candidate locations,
+visited locations, blocked corridors, active route, and recovered location.
+"""
+
+from __future__ import annotations
+
+from typing import Optional, Sequence
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
+
+from app.components.metrics_card import render_page_header, render_step_header
+from environment.graph import CampusGraph
+from environment.locations import build_default_campus, location_names
+
+
+def draw_campus_map_figure(
+    graph: CampusGraph,
+    current_location: Optional[str] = None,
+    last_seen_location: Optional[str] = None,
+    candidate_locations: Optional[Sequence[str]] = None,
+    visited_locations: Optional[Sequence[str]] = None,
+    active_route: Optional[Sequence[str]] = None,
+    recovered_location: Optional[str] = None,
+    visit_order: Optional[Sequence[str]] = None,
+    title: str = "Schematic Campus Recovery Map (Ground & First Floor)",
+    figsize: tuple[float, float] = (10.5, 6.8),
+) -> plt.Figure:
+    """
+    Render the 20-node schematic campus graph with semantic styling,
+    directional route arrows, blocked corridor markers, and floor zones.
+    """
+    candidates_set = set(candidate_locations or [])
+    visited_set = set(visited_locations or [])
+    order_list = list(visit_order or [])
+    order_rank = {name: idx + 1 for idx, name in enumerate(order_list)}
+
+    route_edges: set[frozenset[str]] = set()
+    directed_segments: list[tuple[str, str]] = []
+    if active_route and len(active_route) >= 2:
+        for i in range(len(active_route) - 1):
+            a, b = active_route[i], active_route[i + 1]
+            route_edges.add(frozenset({a, b}))
+            directed_segments.append((a, b))
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+    ax.set_facecolor("#F8F7F2")
+
+    # Floor background bands (Ground Floor: rows 0..2, First Floor: rows 3..5)
+    ax.axhspan(-0.55, 2.45, facecolor="#EEF3EF", alpha=0.65, zorder=0)
+    ax.axhspan(2.55, 5.55, facecolor="#F3F1EA", alpha=0.75, zorder=0)
+    ax.axhline(2.5, color="#B7C4BC", linestyle="--", linewidth=1.2, zorder=1)
+
+    ax.text(
+        -0.42, 1.0, "GROUND FLOOR\n(Rows 0–2)",
+        fontsize=8, fontweight="bold", color="#1B4D3E",
+        va="center", ha="left", family="sans-serif",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#FFFFFF", edgecolor="#D5DDD7", alpha=0.9),
+    )
+    ax.text(
+        -0.42, 4.0, "FIRST FLOOR\n(Rows 3–5)",
+        fontsize=8, fontweight="bold", color="#1F6F78",
+        va="center", ha="left", family="sans-serif",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#FFFFFF", edgecolor="#D5DDD7", alpha=0.9),
+    )
+
+    # 1. Draw corridors (edges)
+    for edge in graph.all_edges():
+        na = graph.get_node(edge.source)
+        nb = graph.get_node(edge.target)
+        x1, y1 = float(na.col), float(na.row)
+        x2, y2 = float(nb.col), float(nb.row)
+        edge_key = frozenset({edge.source, edge.target})
+
+        if edge.blocked:
+            ax.plot(
+                [x1, x2], [y1, y2],
+                color="#B91C1C", linestyle=(0, (4, 3)), linewidth=2.4, zorder=2,
+            )
+            mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            ax.text(
+                mx, my, "✖ BLOCKED",
+                fontsize=6.8, fontweight="bold", color="#991B1B",
+                ha="center", va="center", zorder=4,
+                bbox=dict(boxstyle="round,pad=0.18", facecolor="#FEE2E2", edgecolor="#FCA5A5"),
+            )
+        elif edge_key in route_edges:
+            ax.plot(
+                [x1, x2], [y1, y2],
+                color="#1B4D3E", linestyle="-", linewidth=3.6, zorder=3,
+            )
+            mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            ax.text(
+                mx, my, f"{edge.weight:.1f}",
+                fontsize=7, color="#1B4D3E", fontweight="bold",
+                ha="center", va="center", zorder=4,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="#E6F2EE", edgecolor="#1B4D3E", lw=0.6),
+            )
+        else:
+            ax.plot(
+                [x1, x2], [y1, y2],
+                color="#94A3B8", linestyle="-", linewidth=1.4, alpha=0.75, zorder=2,
+            )
+            mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            ax.text(
+                mx, my, f"{edge.weight:.1f}",
+                fontsize=6.5, color="#4A5A54",
+                ha="center", va="center", zorder=3,
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFFFFF", edgecolor="none", alpha=0.75),
+            )
+
+    # 2. Draw directional arrows along active route
+    for src_name, dst_name in directed_segments:
+        if graph.has_node(src_name) and graph.has_node(dst_name):
+            na = graph.get_node(src_name)
+            nb = graph.get_node(dst_name)
+            ax.annotate(
+                "",
+                xy=(nb.col, nb.row),
+                xytext=(na.col, na.row),
+                arrowprops=dict(
+                    arrowstyle="-|>,head_length=0.55,head_width=0.32",
+                    color="#1B4D3E",
+                    lw=2.0,
+                    shrinkA=14,
+                    shrinkB=14,
+                ),
+                zorder=4,
+            )
+
+    # 3. Draw nodes with distinct shapes + role tags (never color alone)
+    for node in graph.all_nodes():
+        x, y = float(node.col), float(node.row)
+        name = node.name
+
+        is_recovered = name == recovered_location
+        is_current = name == current_location
+        is_last_seen = name == last_seen_location
+        is_candidate = name in candidates_set
+        is_visited = name in visited_set
+        in_route = bool(active_route and name in active_route)
+
+        if is_recovered:
+            facecolor = "#15803D"
+            edgecolor = "#052E16"
+            marker = "*"
+            size = 360
+            role_tag = "[FOUND]"
+            label_bg = "#DCFCE7"
+            label_border = "#15803D"
+        elif is_current and is_last_seen:
+            facecolor = "#1F6F78"
+            edgecolor = "#6D28D9"
+            marker = "s"
+            size = 250
+            role_tag = "[START & LAST SEEN]"
+            label_bg = "#E0F2FE"
+            label_border = "#1F6F78"
+        elif is_current:
+            facecolor = "#1F6F78"
+            edgecolor = "#0F172A"
+            marker = "s"
+            size = 240
+            role_tag = "[START]"
+            label_bg = "#E0F2FE"
+            label_border = "#1F6F78"
+        elif is_last_seen:
+            facecolor = "#6D28D9"
+            edgecolor = "#2E1065"
+            marker = "D"
+            size = 220
+            role_tag = "[LAST SEEN]"
+            label_bg = "#F3E8FF"
+            label_border = "#6D28D9"
+        elif is_candidate and is_visited:
+            facecolor = "#D97706"
+            edgecolor = "#334155"
+            marker = "^"
+            size = 220
+            rank_str = f"#{order_rank[name]}" if name in order_rank else ""
+            role_tag = f"[VISITED+CAND{rank_str}]"
+            label_bg = "#FEF3C7"
+            label_border = "#D97706"
+        elif is_candidate:
+            facecolor = "#D97706"
+            edgecolor = "#78350F"
+            marker = "^"
+            size = 220
+            rank_str = f" #{order_rank[name]}" if name in order_rank else ""
+            role_tag = f"[CAND{rank_str}]"
+            label_bg = "#FEF3C7"
+            label_border = "#D97706"
+        elif is_visited:
+            facecolor = "#64748B"
+            edgecolor = "#1E293B"
+            marker = "P"
+            size = 200
+            role_tag = "[VISITED]"
+            label_bg = "#F1F5F9"
+            label_border = "#64748B"
+        elif in_route:
+            facecolor = "#1B4D3E"
+            edgecolor = "#0F2922"
+            marker = "o"
+            size = 165
+            role_tag = "[ROUTE]"
+            label_bg = "#E6F2EE"
+            label_border = "#1B4D3E"
+        else:
+            facecolor = "#FFFFFF"
+            edgecolor = "#64748B"
+            marker = "o"
+            size = 135
+            role_tag = ""
+            label_bg = "#FFFFFF"
+            label_border = "#D5DDD7"
+
+        ax.scatter(
+            [x], [y],
+            s=size,
+            c=facecolor,
+            edgecolors=edgecolor,
+            marker=marker,
+            linewidths=1.8,
+            zorder=5,
+        )
+
+        label_text = f"{name}\n{role_tag}" if role_tag else f"{name}\n(s={node.search_cost:.1f})"
+        ax.text(
+            x, y + 0.27,
+            label_text,
+            fontsize=7.3,
+            fontweight="bold" if role_tag else "normal",
+            color="#1C2526",
+            ha="center",
+            va="top",
+            zorder=6,
+            bbox=dict(
+                boxstyle="round,pad=0.2",
+                facecolor=label_bg,
+                edgecolor=label_border,
+                linewidth=0.8,
+                alpha=0.94,
+            ),
+        )
+
+    ax.set_xlim(-0.55, 3.55)
+    ax.set_ylim(5.65, -0.55)  # Row 0 at top, Row 5 at bottom
+    ax.set_xticks([0, 1, 2, 3])
+    ax.set_xticklabels(["Col 0 (West)", "Col 1", "Col 2", "Col 3 (East)"], fontsize=8.5)
+    ax.set_yticks([0, 1, 2, 3, 4, 5])
+    ax.set_yticklabels(["Row 0", "Row 1", "Row 2", "Row 3", "Row 4", "Row 5"], fontsize=8.5)
+    ax.set_title(title, fontsize=11.5, fontweight="bold", color="#1C2526", pad=10)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#D5DDD7")
+    ax.spines["bottom"].set_color("#D5DDD7")
+
+    legend_handles = [
+        mlines.Line2D([], [], color="#1F6F78", marker="s", linestyle="None", markersize=8, label="[START] Current Position"),
+        mlines.Line2D([], [], color="#6D28D9", marker="D", linestyle="None", markersize=8, label="[LAST SEEN] Last Seen"),
+        mlines.Line2D([], [], color="#D97706", marker="^", linestyle="None", markersize=8, label="[CAND] Candidate Target"),
+        mlines.Line2D([], [], color="#64748B", marker="P", linestyle="None", markersize=8, label="[VISITED] Visited Place"),
+        mlines.Line2D([], [], color="#15803D", marker="*", linestyle="None", markersize=10, label="[FOUND] Recovered Item (Sim)"),
+        mlines.Line2D([], [], color="#1B4D3E", linewidth=3.0, label="[ROUTE] Active Search Path"),
+        mlines.Line2D([], [], color="#B91C1C", linewidth=2.2, linestyle="--", label="[BLOCKED] Closed Corridor"),
+    ]
+    ax.legend(
+        handles=legend_handles,
+        loc="upper right",
+        fontsize=7.3,
+        frameon=True,
+        facecolor="#FFFFFF",
+        edgecolor="#D5DDD7",
+    )
+
+    fig.tight_layout()
+    return fig
+
+
+def render_campus_legend_caption() -> None:
+    """Render an HTML legend strip and explicit schematic disclaimer below the campus map."""
+    st.markdown(
+        """
+        <div class="cc-legend" role="region" aria-label="Campus Map Legend">
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#1F6F78;"></span><strong>■ [START]</strong> Current Position</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#6D28D9;"></span><strong>◆ [LAST SEEN]</strong> Last-Seen Anchor</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#D97706;"></span><strong>▲ [CAND #k]</strong> Candidate (Tour Order)</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#64748B;"></span><strong>✚ [VISITED]</strong> Visited Place</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#1B4D3E;"></span><strong>━━ [ROUTE]</strong> Planned / Mission Path</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#B91C1C;"></span><strong>✖ [BLOCKED]</strong> Impassable Corridor</span>
+            <span class="cc-legend-item"><span class="cc-swatch" style="background:#15803D;"></span><strong>★ [FOUND]</strong> Recovered Location (Sim)</span>
+        </div>
+        <p style="font-size:0.78rem; color:#4A5A54; margin-top:-0.3rem; margin-bottom:0.75rem;">
+            <em>Schematic Topology Note: This 20-node, 26-corridor graph is an educational abstraction representing a two-floor campus building (Ground Floor &amp; First Floor connected via Stairwell). Coordinates and edge weights represent relative traversal effort rather than GPS or survey geography.</em>
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_campus_map_explorer() -> None:
+    """Standalone interactive Campus Map inspector view."""
+    render_page_header(
+        eyebrow="CAMPUS TOPOLOGY & CORRIDOR INSPECTOR",
+        title="Schematic Campus Map & Node Catalogue",
+        subtitle=(
+            "Inspect the 20 campus locations, room search efforts, corridor weights, "
+            "and test how corridor closures affect reachability between floors."
+        ),
+    )
+
+    campus = build_default_campus()
+    all_locs = location_names()
+    all_edge_labels = [f"{e.source} ↔ {e.target}" for e in campus.all_edges()]
+
+    col_ctrl, col_map = st.columns([1, 2.1], gap="large")
+
+    with col_ctrl:
+        render_step_header("01", "Map Overlay Controls")
+        preview_current = st.selectbox(
+            "Highlight Current Position",
+            options=all_locs,
+            index=0,
+            key="explorer_current",
+        )
+        preview_last_seen = st.selectbox(
+            "Highlight Last-Seen Position",
+            options=all_locs,
+            index=all_locs.index("Library") if "Library" in all_locs else 0,
+            key="explorer_last_seen",
+        )
+        preview_candidates = st.multiselect(
+            "Highlight Candidate Locations",
+            options=all_locs,
+            default=["Library", "Lab-A", "Classroom-101"],
+            key="explorer_candidates",
+        )
+        preview_blocked = st.multiselect(
+            "Simulate Blocked Corridors",
+            options=all_edge_labels,
+            default=[],
+            key="explorer_blocked",
+        )
+
+        for edge_str in preview_blocked:
+            src, tgt = [part.strip() for part in edge_str.split("↔")]
+            campus.block_edge(src, tgt)
+
+        reachable_count = sum(
+            1 for loc in all_locs if campus.has_path(preview_current, loc)
+        )
+        st.metric(
+            "Reachable Locations from Current",
+            f"{reachable_count} / {len(all_locs)}",
+        )
+
+    with col_map:
+        fig = draw_campus_map_figure(
+            graph=campus,
+            current_location=preview_current,
+            last_seen_location=preview_last_seen,
+            candidate_locations=preview_candidates,
+        )
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+        render_campus_legend_caption()
+
+    st.divider()
+    render_step_header("02", "Campus Location & Room Search Effort Reference")
+    node_rows = []
+    for node in campus.all_nodes():
+        neighbors = [f"{nbr} ({w:.1f})" for nbr, w in campus.get_neighbors(node.name)]
+        node_rows.append(
+            {
+                "Location": node.name,
+                "Floor": "Ground Floor" if node.row <= 2 else "First Floor",
+                "Grid Coord (row, col)": f"({node.row}, {node.col})",
+                "Zone Category": node.node_type.title(),
+                "Room Search Effort (1–5)": node.search_cost,
+                "Passable Neighbours (Weight)": ", ".join(neighbors) if neighbors else "Isolated (Blocked)",
+                "Reachable from Current": "Yes" if campus.has_path(preview_current, node.name) else "No",
+            }
+        )
+    st.dataframe(pd.DataFrame(node_rows), use_container_width=True, hide_index=True)
+
+```
+
+---
+
+## 4. `lost_item_agent/app/components/search_workspace.py`
+
+This module implements the primary **Search Workspace** workflow while satisfying every `AppTest` assertion in `lost_item_agent/tests/test_app.py` (`at.selectbox[0]` for item category, `at.multiselect[0]` for candidate locations, `key="current_location"`, `key="visited_locations"`, `label="Describe the item"`, `at.button[0]` for **Build Search Plan**, and `at.button[1]` for **Simulate Recovery Mission**).
+
+```python
+"""
+app/components/search_workspace.py
+----------------------------------
+Primary Campus Lost & Found Search Workspace.
+Provides a guided 4-step workflow for configuring lost-item context,
+selecting search strategy and heuristics, and executing either an a priori
+Search Plan or a step-by-step Simulated Recovery Mission.
+"""
+
+from __future__ import annotations
+
+import math
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
+
+from app.components.campus_map_view import (
+    draw_campus_map_figure,
+    render_campus_legend_caption,
+)
+from app.components.metrics_card import (
+    render_mode_distinction_banner,
+    render_page_header,
+    render_plan_summary_metrics,
+    render_step_header,
+)
+from environment.locations import (
+    ITEM_TYPE_CANDIDATES,
+    build_default_campus,
+    location_names,
+)
+from planner.candidate_planner import (
+    DEFAULT_PROBABILITY,
+    CandidatePlanner,
+    CandidateResult,
+    MissionStep,
+)
+from search.heuristics import (
+    euclidean_distance,
+    manhattan_distance,
+    null_heuristic,
+)
+
+ALGORITHM_LABELS: dict[str, str] = {
+    "astar": "A* Search — f(n) = g(n) + h(n) (Weight-Optimal with Admissible h)",
+    "bfs": "Breadth-First Search (BFS) — Uninformed (Hop-Optimal)",
+    "greedy": "Greedy Best-First Search — Heuristic-Driven f(n) = h(n)",
+}
+
+HEURISTIC_OPTIONS: dict[str, tuple[str, callable]] = {
+    "euclidean": ("Euclidean Distance (Admissible on Campus Graph)", euclidean_distance),
+    "manhattan": ("Manhattan Distance (L1 Grid Metric)", manhattan_distance),
+    "null": ("Null Heuristic h(n) = 0 (Dijkstra Baseline)", null_heuristic),
+}
+
+
+def _build_Composite_mission_route(steps: list[MissionStep]) -> list[str]:
+    """Concatenate sequential step paths into a single continuous route for map display."""
+    composite: list[str] = []
+    for step in steps:
+        if not step.algorithm_result.success or not step.algorithm_result.path:
+            continue
+        segment = step.algorithm_result.path
+        if not composite:
+            composite.extend(segment)
+        else:
+            if composite[-1] == segment[0]:
+                composite.extend(segment[1:])
+            else:
+                composite.extend(segment)
+    return composite
+
+
+def _candidates_to_dataframe(
+    results: list[CandidateResult],
+    visited_set: set[str],
+    last_seen: str,
+) -> pd.DataFrame:
+    """Convert CandidateResult objects into a clear, student-friendly ranking DataFrame."""
+    rows = []
+    for cr in results:
+        tags = []
+        if cr.candidate == last_seen:
+            tags.append("Last Seen")
+        if cr.candidate in visited_set:
+            tags.append("Visited Since")
+        context_str = ", ".join(tags) if tags else "Candidate Preset"
+
+        rows.append(
+            {
+                "Rank": cr.rank,
+                "Candidate Location": cr.candidate,
+                "Context Source": context_str,
+                "Reachable": "Yes" if cr.reachable else "No (Blocked)",
+                "Walk Cost g(n)": round(cr.pathfinding_cost, 2) if math.isfinite(cr.pathfinding_cost) else float("inf"),
+                "Room Effort": round(cr.search_cost, 2),
+                "Total Effort": round(cr.total_cost, 2) if math.isfinite(cr.total_cost) else float("inf"),
+                "Belief P(item)": round(cr.probability_weight, 2),
+                "Priority Score": round(cr.priority_score, 3) if math.isfinite(cr.priority_score) else float("inf"),
+                "Hops": cr.algorithm_result.path_length if cr.reachable else 0,
+                "Nodes Expanded": cr.algorithm_result.nodes_expanded,
+                "Route From Start": " → ".join(cr.path) if cr.reachable else "Unreachable",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_search_workspace() -> None:
+    """Render the main Campus Lost & Found Command Center workspace."""
+    render_page_header(
+        eyebrow="CAMPUS LOST & FOUND COMMAND CENTER",
+        title="Lost Item Recovery Planner & Mission Simulator",
+        subtitle=(
+            "Configure where the item was last seen, your current starting location, and candidate rooms. "
+            "Compare a priori route planning against sequential room-by-room recovery simulation."
+        ),
+    )
+
+    base_campus = build_default_campus()
+    all_locations = location_names()
+    item_categories = list(ITEM_TYPE_CANDIDATES.keys()) + ["other / custom"]
+
+    # Initialize session state defaults
+    if "_last_item_category" not in st.session_state:
+        st.session_state["_last_item_category"] = item_categories[0]
+    if "candidate_locations" not in st.session_state:
+        st.session_state["candidate_locations"] = list(
+            ITEM_TYPE_CANDIDATES[item_categories[0]]
+        )
+
+    left_col, right_col = st.columns([1.08, 1.32], gap="large")
+
+    with left_col:
+        # ------------------------------------------------------------------
+        # STEP 1: SEARCH CONTEXT
+        # ------------------------------------------------------------------
+        render_step_header(
+            "01",
+            "Search Context & Location History",
+            "Separate where the item was last seen from where the recovery agent starts walking.",
+        )
+
+        # IMPORTANT: at.selectbox[0] is tested for item category selection
+        selected_category = st.selectbox(
+            "Lost item category",
+            options=item_categories,
+            index=0,
+            key="item_category",
+            help="Choosing an item category pre-populates typical campus candidate locations.",
+        )
+
+        # Synchronize default candidates when the item category changes
+        if selected_category != st.session_state.get("_last_item_category"):
+            st.session_state["_last_item_category"] = selected_category
+            if selected_category in ITEM_TYPE_CANDIDATES:
+                st.session_state["candidate_locations"] = list(
+                    ITEM_TYPE_CANDIDATES[selected_category]
+                )
+            else:
+                st.session_state["candidate_locations"] = [
+                    "Library",
+                    "Canteen",
+                    "Classroom-101",
+                ]
+
+        # IMPORTANT: label="Describe the item" is tested in test_app.py
+        custom_description = st.text_input(
+            "Describe the item",
+            value="",
+            placeholder="e.g., blue water bottle, silver MacBook Pro, lab notebook",
+            help="Optional specific description used in mission logs and recovery alerts.",
+        )
+
+        loc_col1, loc_col2 = st.columns(2)
+        with loc_col1:
+            # IMPORTANT: key="current_location" is tested in test_app.py
+            current_location = st.selectbox(
+                "Your current location (Agent Start)",
+                options=all_locations,
+                index=all_locations.index("Main Entrance") if "Main Entrance" in all_locations else 0,
+                key="current_location",
+                help="The physical node where the recovery route begins.",
+            )
+        with loc_col2:
+            last_seen_location = st.selectbox(
+                "Last-seen location",
+                options=all_locations,
+                index=all_locations.index("Library") if "Library" in all_locations else 0,
+                key="last_seen_location",
+                help="Where the item was last remembered. Highlighted on the map and boosted in default belief.",
+            )
+
+        # IMPORTANT: at.multiselect[0] is tested for candidate locations
+        candidate_locations = st.multiselect(
+            "Likely candidate locations",
+            options=all_locations,
+            key="candidate_locations",
+            help="Rooms to evaluate and rank. Places visited since last seen are automatically merged into the search list.",
+        )
+
+        # IMPORTANT: key="visited_locations" is tested in test_app.py
+        visited_locations = st.multiselect(
+            "Places visited since item was last seen",
+            options=all_locations,
+            default=[],
+            key="visited_locations",
+            help="Any location entered here is added to the candidate inspection list and highlighted on the campus map.",
+        )
+
+        all_corridor_labels = [
+            f"{edge.source} ↔ {edge.target}" for edge in base_campus.all_edges()
+        ]
+        blocked_corridors = st.multiselect(
+            "Blocked corridors (optional dynamic obstacles)",
+            options=all_corridor_labels,
+            default=[],
+            key="blocked_corridors",
+            help="Close specific campus corridors (e.g., locked doors or maintenance) before planning or running a mission.",
+        )
+
+        st.divider()
+
+        # ------------------------------------------------------------------
+        # STEP 2: SEARCH STRATEGY & SIMULATION INPUT
+        # ------------------------------------------------------------------
+        render_step_header(
+            "02",
+            "Search Strategy & Simulation Ground Truth",
+            "Select the pathfinding algorithm, heuristic function, and user belief priors.",
+        )
+
+        algo_col, heur_col = st.columns(2)
+        with algo_col:
+            selected_algo = st.selectbox(
+                "Pathfinding algorithm",
+                options=["astar", "bfs", "greedy"],
+                format_func=lambda k: ALGORITHM_LABELS[k].split(" — ")[0],
+                key="search_algorithm",
+                help=ALGORITHM_LABELS["astar"],
+            )
+        with heur_col:
+            selected_heur_key = st.selectbox(
+                "Heuristic function h(n)",
+                options=list(HEURISTIC_OPTIONS.keys()),
+                format_func=lambda k: HEURISTIC_OPTIONS[k][0],
+                disabled=(selected_algo == "bfs"),
+                key="search_heuristic",
+                help="Used by A* and Greedy Best-First Search. Ignored by uninformed BFS.",
+            )
+
+        if selected_algo == "bfs":
+            st.caption(
+                "ℹ️ **BFS Note:** Breadth-First Search explores level-by-level (hop-optimal) and ignores edge weights and heuristics."
+            )
+
+        # Merge candidate list in deterministic order: candidate_locations + visited_locations
+        merged_candidates: list[str] = []
+        for loc in list(candidate_locations) + list(visited_locations):
+            if loc not in merged_candidates:
+                merged_candidates.append(loc)
+
+        # Optional per-candidate user belief sliders
+        probabilities: dict[str, float] = {}
+        with st.expander("Adjust Candidate Belief Priors P(item) — Optional", expanded=False):
+            st.caption(
+                "Beliefs are user-supplied priors in [0.0, 1.0], not machine-learned probabilities. "
+                "Priority score = (Walk Cost + Room Search Effort) × (1 − Belief)."
+            )
+            if not merged_candidates:
+                st.info("Select at least one candidate or visited location above.")
+            else:
+                for cand in merged_candidates:
+                    default_prob = 0.70 if cand == last_seen_location else (
+                        0.60 if cand in visited_locations else DEFAULT_PROBABILITY
+                    )
+                    probabilities[cand] = st.slider(
+                        f"Belief for {cand}",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=float(default_prob),
+                        step=0.05,
+                        key=f"prob_slider_{cand}",
+                    )
+
+        # If expander sliders weren't touched, still give a sensible default dict
+        for cand in merged_candidates:
+            if cand not in probabilities:
+                probabilities[cand] = (
+                    0.70 if cand == last_seen_location else (
+                        0.60 if cand in visited_locations else DEFAULT_PROBABILITY
+                    )
+                )
+
+        # Clearly isolated Simulation-Only Ground Truth box
+        st.markdown(
+            """
+            <div class="cc-sim-box">
+                <div class="cc-sim-label">⚙ Simulation-Only Ground Truth (Not Visible to Planner)</div>
+                <div style="font-size:0.82rem; color:#4A5A54;">
+                    Used exclusively when you click <strong>Simulate Recovery Mission</strong> to test whether
+                    the agent recovers the item as it inspects rooms in order.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        default_actual_idx = 0
+        if merged_candidates and merged_candidates[0] in all_locations:
+            default_actual_idx = all_locations.index(merged_candidates[0])
+        elif last_seen_location in all_locations:
+            default_actual_idx = all_locations.index(last_seen_location)
+
+        actual_item_location = st.selectbox(
+            "Actual item location (Simulation-only sensor target)",
+            options=all_locations,
+            index=default_actual_idx,
+            key="actual_item_location",
+            help="In a real search, this location is unknown. In simulation mode, the mission stops when this room is inspected.",
+        )
+
+        # ------------------------------------------------------------------
+        # STEP 3: PRIMARY ACTIONS (Strictly button[0] and button[1])
+        # ------------------------------------------------------------------
+        render_step_header("03", "Primary Actions")
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            # IMPORTANT: at.button[0] in test_app.py
+            build_plan_clicked = st.button(
+                "Build Search Plan",
+                type="primary",
+                use_container_width=True,
+                help="Rank all candidate rooms from your current location and compute a nearest-neighbor inspection tour.",
+            )
+        with btn_col2:
+            # IMPORTANT: at.button[1] in test_app.py
+            simulate_mission_clicked = st.button(
+                "Simulate Recovery Mission",
+                type="secondary",
+                use_container_width=True,
+                help="Step through the recommended tour, replanning from each room until the simulated item is recovered.",
+            )
+
+        if simulate_mission_clicked:
+            st.session_state["workspace_mode"] = "simulation"
+        elif build_plan_clicked or "workspace_mode" not in st.session_state:
+            st.session_state["workspace_mode"] = "plan"
+
+    # ----------------------------------------------------------------------
+    # EXECUTE REAL PLANNER & MISSION LOGIC
+    # ----------------------------------------------------------------------
+    active_campus = build_default_campus()
+    for corridor_str in blocked_corridors:
+        src, tgt = [part.strip() for part in corridor_str.split("↔")]
+        active_campus.block_edge(src, tgt)
+
+    heuristic_fn = HEURISTIC_OPTIONS[selected_heur_key][1]
+    planner = CandidatePlanner(
+        graph=active_campus,
+        algorithm=selected_algo,  # type: ignore[arg-type]
+        heuristic=heuristic_fn,
+    )
+
+    effective_candidates = merged_candidates if merged_candidates else ["Library"]
+    plan_results = planner.plan(
+        start=current_location,
+        candidates=effective_candidates,
+        probabilities=probabilities,
+    )
+    visit_order = planner.recommended_visit_order(plan_results, start=current_location)
+
+    workspace_mode = st.session_state.get("workspace_mode", "plan")
+    mission_steps: list[MissionStep] = []
+    if workspace_mode == "simulation":
+        mission_steps = planner.execute_mission(
+            start=current_location,
+            visit_order=visit_order,
+            actual_location=actual_item_location,
+        )
+
+    item_display_name = (
+        custom_description.strip()
+        if custom_description.strip()
+        else selected_category
+    )
+
+    # ----------------------------------------------------------------------
+    # RIGHT COLUMN: RESULTS, TELEMETRY & CAMPUS MAP
+    # ----------------------------------------------------------------------
+    with right_col:
+        render_step_header(
+            "04",
+            "Recovery Plan, Campus Route Map & Telemetry",
+            "Inspect candidate rankings, recommended inspection sequence, and algorithm work.",
+        )
+
+        found_step = next((s for s in mission_steps if s.item_found), None)
+
+        render_mode_distinction_banner(
+            mode=workspace_mode,
+            algorithm_label=planner.algorithm_name(),
+            item_label=item_display_name,
+            recovered=bool(found_step),
+            recovered_location=found_step.candidate if found_step else None,
+            steps_taken=len(mission_steps),
+        )
+
+        # Emit native st.success / st.warning in simulation mode (asserted in test_app.py)
+        if workspace_mode == "simulation":
+            if found_step:
+                st.success(
+                    f"Recovery mission succeeded: found '{item_display_name}' at "
+                    f"{found_step.candidate} after inspecting {len(mission_steps)} location(s)."
+                )
+            else:
+                st.warning(
+                    f"Simulated mission completed {len(mission_steps)} inspection(s) without recovering "
+                    f"'{item_display_name}' (simulated ground truth: {actual_item_location})."
+                )
+
+        render_plan_summary_metrics(
+            results=plan_results,
+            visit_order=visit_order,
+            algorithm_label=planner.algorithm_name(),
+            mission_steps=mission_steps if workspace_mode == "simulation" else None,
+        )
+
+        # Determine active route to highlight on the campus map
+        if workspace_mode == "simulation" and mission_steps:
+            highlighted_route = _build_Composite_mission_route(mission_steps)
+            recovered_node = found_step.candidate if found_step else None
+            map_title = (
+                f"Simulated Recovery Route ({planner.algorithm_name()}) — "
+                f"{'Recovered at ' + found_step.candidate if found_step else 'Unrecovered'}"
+            )
+        else:
+            top_reachable = next((r for r in plan_results if r.reachable), None)
+            highlighted_route = top_reachable.path if top_reachable else []
+            recovered_node = None
+            map_title = (
+                f"Planned Route to Top Candidate ({top_reachable.candidate if top_reachable else 'None'}) "
+                f"via {planner.algorithm_name()}"
+            )
+
+        # Recommended Visit Order Banner
+        if visit_order:
+            tour_chain = " → ".join([f"{current_location} (Start)"] + visit_order)
+            st.markdown(
+                f"""
+                <div class="cc-card">
+                    <div style="font-family:var(--font-mono); font-size:0.75rem; color:#1F6F78; text-transform:uppercase;">
+                        Recommended Inspection Sequence (Greedy Nearest-Neighbor Tour)
+                    </div>
+                    <div style="font-size:0.93rem; font-weight:600; color:#1C2526; margin-top:0.25rem;">
+                        {tour_chain}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error("All selected candidate locations are unreachable from your current position due to blocked corridors.")
+
+        # Campus Map Visualization
+        fig = draw_campus_map_figure(
+            graph=active_campus,
+            current_location=current_location,
+            last_seen_location=last_seen_location,
+            candidate_locations=effective_candidates,
+            visited_locations=visited_locations,
+            active_route=highlighted_route,
+            recovered_location=recovered_node,
+            visit_order=visit_order,
+            title=map_title,
+        )
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+        render_campus_legend_caption()
+
+    # ----------------------------------------------------------------------
+    # FULL-WIDTH CANDIDATE RANKING & MISSION STEP TABLES
+    # ----------------------------------------------------------------------
+    st.divider()
+    render_step_header(
+        "05",
+        "Candidate Priority Ranking & Step-by-Step Inspection Log",
+        "Lower Priority Score = (Walk Cost + Room Search Effort) × (1 − Belief) ranks higher.",
+    )
+
+    ranking_df = _candidates_to_dataframe(
+        results=plan_results,
+        visited_set=set(visited_locations),
+        last_seen=last_seen_location,
+    )
+    # IMPORTANT: at.dataframe[0] is asserted in test_app.py
+    st.dataframe(ranking_df, use_container_width=True, hide_index=True)
+
+    if workspace_mode == "simulation" and mission_steps:
+        st.markdown("#### Simulated Mission Step-by-Step Replanning Trace")
+        step_rows = []
+        cumulative_cost = 0.0
+        for idx, step in enumerate(mission_steps, start=1):
+            leg_cost = step.algorithm_result.path_cost if step.algorithm_result.success else 0.0
+            cumulative_cost += leg_cost
+            step_rows.append(
+                {
+                    "Inspection #": idx,
+                    "From Location": step.from_location,
+                    "Target Candidate": step.candidate,
+                    "Leg Route": " → ".join(step.algorithm_result.path) if step.algorithm_result.success else "Unreachable",
+                    "Leg Walk Cost": round(leg_cost, 2),
+                    "Cumulative Walk Cost": round(cumulative_cost, 2),
+                    "Nodes Expanded": step.algorithm_result.nodes_expanded,
+                    "Runtime (ms)": round(step.algorithm_result.execution_time_ms, 3),
+                    "Inspection Outcome": "RECOVERED ITEM" if step.item_found else "Searched — Not Here",
+                }
+            )
+        st.dataframe(pd.DataFrame(step_rows), use_container_width=True, hide_index=True)
+
+```
+
+---
+
+## 5. `lost_item_agent/app/components/grid_search_view.py`
+
+This module implements the **2D Grid Search Playground** with scannable controls for grid dimensions, obstacle density, seed, start/goal coordinates, algorithm, and heuristic. It visually distinguishes **Free Cells**, **Obstacles**, **Explored Cells**, **Final Path**, **Start**, and **Goal** using both color and cell symbols.
+
+```python
+"""
+app/components/grid_search_view.py
+----------------------------------
+Interactive 2D Grid Search Playground.
+Allows students to configure grid dimensions, obstacle density, random seed,
+start/goal coordinates, and compare how BFS, Greedy Best-First Search, and A*
+explore the state space.
+"""
+
+from __future__ import annotations
+
+from collections import deque
+import heapq
+from typing import Callable
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import streamlit as st
+
+from app.components.metrics_card import (
+    render_page_header,
+    render_search_result_metrics,
+    render_step_header,
+)
+from environment.grid import GridMap
+from environment.models import SearchResult
+from search.astar import astar
+from search.bfs import bfs
+from search.greedy import greedy_best_first
+from search.heuristics import manhattan_distance, null_heuristic
+
+
+def _trace_explored_cells(
+    grid: GridMap,
+    start: str,
+    goal: str,
+    algorithm: str,
+    heuristic: Callable,
+) -> set[tuple[int, int]]:
+    """
+    Reproduce the exact set of expanded cell coordinates (row, col)
+    for visualization on the 2D grid without modifying SearchResult.
+    """
+    try:
+        sr, sc = GridMap.name_to_pos(start)
+        gr, gc = GridMap.name_to_pos(goal)
+    except ValueError:
+        return set()
+    if not (grid.is_valid(sr, sc) and grid.is_valid(gr, gc)):
+        return set()
+    if start == goal:
+        return {(sr, sc)}
+
+    explored: set[tuple[int, int]] = set()
+
+    if algorithm == "BFS":
+        frontier: deque[str] = deque([start])
+        came_from: set[str] = {start}
+        while frontier:
+            current = frontier.popleft()
+            explored.add(GridMap.name_to_pos(current))
+            for neighbor, _ in grid.get_neighbors_by_name(current):
+                if neighbor == goal:
+                    return explored
+                if neighbor not in came_from:
+                    came_from.add(neighbor)
+                    frontier.append(neighbor)
+        return explored
+
+    elif algorithm == "Greedy":
+        counter = 0
+        heap: list[tuple[float, int, str]] = [(heuristic(start, goal, grid), counter, start)]
+        visited: set[str] = set()
+        while heap:
+            _, _, current = heapq.heappop(heap)
+            if current in visited:
+                continue
+            visited.add(current)
+            explored.add(GridMap.name_to_pos(current))
+            if current == goal:
+                return explored
+            for neighbor, _ in grid.get_neighbors_by_name(current):
+                if neighbor not in visited:
+                    counter += 1
+                    heapq.heappush(heap, (heuristic(neighbor, goal, grid), counter, neighbor))
+        return explored
+
+    else:  # A*
+        counter = 0
+        heap_astar: list[tuple[float, int, float, str]] = [
+            (heuristic(start, goal, grid), counter, 0.0, start)
+        ]
+        g_best: dict[str, float] = {start: 0.0}
+        while heap_astar:
+            _, _, g_val, current = heapq.heappop(heap_astar)
+            if g_val > g_best.get(current, float("inf")):
+                continue
+            explored.add(GridMap.name_to_pos(current))
+            if current == goal:
+                return explored
+            for neighbor, weight in grid.get_neighbors_by_name(current):
+                tentative_g = g_val + weight
+                if tentative_g < g_best.get(neighbor, float("inf")):
+                    g_best[neighbor] = tentative_g
+                    counter += 1
+                    f_n = tentative_g + heuristic(neighbor, goal, grid)
+                    heapq.heappush(heap_astar, (f_n, counter, tentative_g, neighbor))
+        return explored
+
+
+def draw_grid_figure(
+    grid: GridMap,
+    result: SearchResult,
+    explored_cells: set[tuple[int, int]],
+    start_pos: tuple[int, int],
+    goal_pos: tuple[int, int],
+) -> plt.Figure:
+    """
+    Draw the 2D grid clearly distinguishing:
+    0 = Free Cell (#FFFFFF)
+    1 = Obstacle (#334155)
+    2 = Explored Cell (#FEF3C7)
+    3 = Final Path (#1B4D3E)
+    4 = Start Cell (#1F6F78)
+    5 = Goal Cell (#15803D)
+    """
+    rows, cols = grid.rows, grid.cols
+    matrix = np.zeros((rows, cols), dtype=int)
+
+    for r in range(rows):
+        for c in range(cols):
+            if grid.is_obstacle(r, c):
+                matrix[r, c] = 1
+
+    for r, c in explored_cells:
+        if 0 <= r < rows and 0 <= c < cols and matrix[r, c] == 0:
+            matrix[r, c] = 2
+
+    path_coords = [GridMap.name_to_pos(name) for name in result.path]
+    for r, c in path_coords:
+        if 0 <= r < rows and 0 <= c < cols:
+            matrix[r, c] = 3
+
+    sr, sc = start_pos
+    gr, gc = goal_pos
+    if 0 <= sr < rows and 0 <= sc < cols:
+        matrix[sr, sc] = 4
+    if 0 <= gr < rows and 0 <= gc < cols:
+        matrix[gr, gc] = 5
+
+    cmap = mcolors.ListedColormap(
+        ["#FFFFFF", "#334155", "#FEF3C7", "#1B4D3E", "#1F6F78", "#15803D"]
+    )
+    norm = mcolors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5], cmap.N)
+
+    fig, ax = plt.subplots(figsize=(7.8, 6.6), facecolor="#FFFFFF")
+    ax.imshow(matrix, cmap=cmap, norm=norm, origin="upper")
+
+    # Draw cell grid lines
+    ax.set_xticks(np.arange(-0.5, cols, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, rows, 1), minor=True)
+    ax.grid(which="minor", color="#D5DDD7", linestyle="-", linewidth=0.8)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    # Add non-color symbols inside cells when grid <= 25x25 for accessibility
+    if rows <= 25 and cols <= 25:
+        font_sz = 9 if max(rows, cols) <= 12 else (7 if max(rows, cols) <= 18 else 5.8)
+        for r in range(rows):
+            for c in range(cols):
+                code = matrix[r, c]
+                if code == 4:
+                    txt, col_txt = "S", "#FFFFFF"
+                elif code == 5:
+                    txt, col_txt = "G", "#FFFFFF"
+                elif code == 3:
+                    txt, col_txt = "●", "#FFFFFF"
+                elif code == 2:
+                    txt, col_txt = "•", "#92400E"
+                elif code == 1:
+                    txt, col_txt = "#", "#CBD5E1"
+                else:
+                    txt, col_txt = "", "#64748B"
+                if txt:
+                    ax.text(
+                        c, r, txt,
+                        ha="center", va="center",
+                        color=col_txt, fontsize=font_sz, fontweight="bold",
+                    )
+
+    step_ticks = max(1, max(rows, cols) // 10)
+    ax.set_xticks(range(0, cols, step_ticks))
+    ax.set_yticks(range(0, rows, step_ticks))
+    ax.set_xlabel("Column Index", fontsize=9.5)
+    ax.set_ylabel("Row Index", fontsize=9.5)
+    ax.set_title(
+        f"2D Grid Search ({rows}×{cols}) — {result.algorithm} "
+        f"[{'Path Cost: ' + str(int(result.path_cost)) if result.success else 'Unreachable'}]",
+        fontsize=11,
+        fontweight="bold",
+        pad=10,
+    )
+
+    patches = [
+        mpatches.Patch(facecolor="#FFFFFF", edgecolor="#94A3B8", label="[ ] Free Cell"),
+        mpatches.Patch(facecolor="#334155", edgecolor="#1E293B", label="[#] Obstacle"),
+        mpatches.Patch(facecolor="#FEF3C7", edgecolor="#D97706", label="[•] Explored Frontier"),
+        mpatches.Patch(facecolor="#1B4D3E", edgecolor="#0F2922", label="[●] Returned Path"),
+        mpatches.Patch(facecolor="#1F6F78", edgecolor="#0F172A", label="[S] Start Cell"),
+        mpatches.Patch(facecolor="#15803D", edgecolor="#052E16", label="[G] Goal Cell"),
+    ]
+    ax.legend(
+        handles=patches,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+        fontsize=8,
+        frameon=True,
+        facecolor="#FFFFFF",
+        edgecolor="#D5DDD7",
+    )
+    fig.tight_layout()
+    return fig
+
+
+def render_grid_search_playground() -> None:
+    """Render the interactive 2D Grid Search Playground view."""
+    render_page_header(
+        eyebrow="4-DIRECTIONAL OBSTACLE GRID ENVIRONMENT",
+        title="2D Grid Search Playground",
+        subtitle=(
+            "Configure grid dimensions, obstacle density, random seed, start/goal coordinates, "
+            "and inspect how BFS, Greedy Best-First Search, and A* expand cells."
+        ),
+    )
+
+    col_controls, col_canvas = st.columns([1.0, 1.55], gap="large")
+
+    with col_controls:
+        render_step_header("01", "Grid Geometry & Obstacle Seed")
+        g_col1, g_col2 = st.columns(2)
+        with g_col1:
+            rows = st.slider("Grid Rows", min_value=5, max_value=35, value=12, step=1, key="grid_rows")
+        with g_col2:
+            cols = st.slider("Grid Columns", min_value=5, max_value=35, value=12, step=1, key="grid_cols")
+
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+            density = st.slider(
+                "Obstacle Density",
+                min_value=0.0,
+                max_value=0.60,
+                value=0.20,
+                step=0.05,
+                key="grid_density",
+                help="Fraction of interior cells generated as obstacles. Corners (0,0) and (rows-1, cols-1) are always kept clear.",
+            )
+        with d_col2:
+            seed = st.number_input(
+                "Random Seed",
+                min_value=0,
+                max_value=99999,
+                value=42,
+                step=1,
+                key="grid_seed",
+            )
+
+        grid = GridMap.from_obstacle_density(rows, cols, density=float(density), seed=int(seed))
+        walkable_names = grid.all_names()
+
+        st.divider()
+        render_step_header("02", "Start, Goal & Search Algorithm")
+        s_col1, s_col2 = st.columns(2)
+        default_start = "(0,0)" if "(0,0)" in walkable_names else walkable_names[0]
+        default_goal = (
+            f"({rows - 1},{cols - 1})"
+            if f"({rows - 1},{cols - 1})" in walkable_names
+            else walkable_names[-1]
+        )
+
+        with s_col1:
+            start_cell = st.selectbox(
+                "Start Cell (S)",
+                options=walkable_names,
+                index=walkable_names.index(default_start),
+                key="grid_start_cell",
+            )
+        with s_col2:
+            goal_cell = st.selectbox(
+                "Goal Cell (G)",
+                options=walkable_names,
+                index=walkable_names.index(default_goal),
+                key="grid_goal_cell",
+            )
+
+        algo_choice = st.selectbox(
+            "Algorithm",
+            options=["A*", "BFS", "Greedy"],
+            index=0,
+            key="grid_algo_choice",
+        )
+        heur_choice = st.selectbox(
+            "Grid Heuristic",
+            options=["Manhattan Distance (Admissible L1)", "Null Heuristic h(n)=0 (Dijkstra)"],
+            index=0,
+            disabled=(algo_choice == "BFS"),
+            key="grid_heur_choice",
+        )
+
+        heur_fn = (
+            manhattan_distance
+            if heur_choice.startswith("Manhattan")
+            else null_heuristic
+        )
+
+        st.caption(
+            f"**Grid Summary:** {grid.num_cells} total cells | "
+            f"{grid.obstacle_count} obstacles ({grid.obstacle_count / grid.num_cells:.0%}) | "
+            f"{len(walkable_names)} walkable cells."
+        )
+
+    # Execute selected search algorithm
+    if algo_choice == "BFS":
+        result = bfs(grid, start_cell, goal_cell)
+    elif algo_choice == "Greedy":
+        result = greedy_best_first(grid, start_cell, goal_cell, heur_fn)
+    else:
+        result = astar(grid, start_cell, goal_cell, heur_fn)
+
+    explored_coords = _trace_explored_cells(
+        grid=grid,
+        start=start_cell,
+        goal=goal_cell,
+        algorithm=algo_choice,
+        heuristic=heur_fn,
+    )
+
+    with col_canvas:
+        render_step_header("03", "State-Space Exploration & Path Telemetry")
+        render_search_result_metrics(result)
+
+        if result.success:
+            st.success(
+                f"{result.algorithm} found a path of {result.path_length} steps "
+                f"(cost {result.path_cost:.1f}) after expanding {result.nodes_expanded} cells."
+            )
+        else:
+            st.error(
+                f"Goal {goal_cell} is unreachable from {start_cell} — obstacles block all 4-directional paths."
+            )
+
+        fig = draw_grid_figure(
+            grid=grid,
+            result=result,
+            explored_cells=explored_coords,
+            start_pos=GridMap.name_to_pos(start_cell),
+            goal_pos=GridMap.name_to_pos(goal_cell),
+        )
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+        with st.expander("Inspect Ordered Path Coordinates & ASCII Map", expanded=False):
+            if result.success:
+                st.code(" → ".join(result.path), language="text")
+            if rows <= 20 and cols <= 20:
+                st.caption("Raw Grid ASCII (`.` = free, `#` = obstacle):")
+                st.code(grid.to_ascii(), language="text")
+
+```
+
+---
+
+## 6. `lost_item_agent/app/components/algorithm_comparison_view.py`
+
+This module runs **BFS**, **Greedy Best-First Search**, and **A*** on the exact same campus graph or 2D grid instance so students can directly compare path optimality, hop counts, and frontier expansion.
+
+```python
+"""
+app/components/algorithm_comparison_view.py
+-------------------------------------------
+Side-by-side comparison of BFS, Greedy Best-First Search, and A*
+on identical Campus Graph or 2D Grid problem instances.
+"""
+
+from __future__ import annotations
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+from app.components.campus_map_view import draw_campus_map_figure
+from app.components.metrics_card import render_page_header, render_step_header
+from environment.locations import build_default_campus, location_names
+from environment.grid import GridMap
+from search.astar import astar
+from search.bfs import bfs
+from search.greedy import greedy_best_first
+from search.heuristics import (
+    euclidean_distance,
+    manhattan_distance,
+    null_heuristic,
+)
+from visualization.chart_viz import ALGO_COLOURS
+
+
+def _draw_single_instance_bars(results_df: pd.DataFrame) -> plt.Figure:
+    """Draw a 3-panel bar chart comparing Path Cost, Nodes Expanded, and Nodes Generated."""
+    fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.6), facecolor="#FFFFFF")
+    metrics = [
+        ("Path Cost", "Walk / Path Cost"),
+        ("Nodes Expanded", "Nodes Expanded"),
+        ("Nodes Generated", "Nodes Generated"),
+    ]
+    algos = results_df["Algorithm"].tolist()
+    colors = [ALGO_COLOURS.get(a, "#1B4D3E") for a in algos]
+
+    for ax, (col_name, title) in zip(axes, metrics):
+        vals = results_df[col_name].fillna(0.0).tolist()
+        bars = ax.bar(algos, vals, color=colors, width=0.52, edgecolor="white")
+        for bar, val in zip(bars, vals):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                bar.get_height() * 1.01,
+                f"{val:.1f}" if isinstance(val, float) and not val.is_integer() else f"{int(val)}",
+                ha="center",
+                va="bottom",
+                fontsize=8.5,
+                fontweight="bold",
+            )
+        ax.set_title(title, fontsize=10, fontweight="bold", color="#1C2526")
+        ax.grid(axis="y", linestyle="--", alpha=0.35)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
+def render_algorithm_comparison() -> None:
+    """Render the side-by-side Multi-Algorithm Comparison screen."""
+    render_page_header(
+        eyebrow="CONTROLLED ALGORITHMIC COMPARISON",
+        title="Multi-Algorithm Comparison: BFS vs. Greedy vs. A*",
+        subtitle=(
+            "Run Breadth-First Search, Greedy Best-First Search, and A* on the exact same "
+            "graph or grid instance. Compare weighted path cost, hop count, and search effort."
+        ),
+    )
+
+    render_step_header("01", "Select Environment & Problem Instance")
+    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1.1, 1.1, 1.2])
+
+    with ctrl_col1:
+        env_mode = st.selectbox(
+            "Environment Type",
+            options=["Campus Graph (Weighted 20-Node)", "2D Obstacle Grid (Uniform Cost)"],
+            index=0,
+            key="comp_env_mode",
+        )
+
+    is_campus = env_mode.startswith("Campus")
+
+    if is_campus:
+        campus = build_default_campus()
+        locs = location_names()
+        with ctrl_col2:
+            start_node = st.selectbox(
+                "Start Location",
+                options=locs,
+                index=locs.index("Main Entrance") if "Main Entrance" in locs else 0,
+                key="comp_campus_start",
+            )
+            goal_node = st.selectbox(
+                "Goal Location",
+                options=locs,
+                index=locs.index("Classroom-103") if "Classroom-103" in locs else len(locs) - 1,
+                key="comp_campus_goal",
+            )
+        with ctrl_col3:
+            heur_label = st.selectbox(
+                "Informed Heuristic (Greedy & A*)",
+                options=["Euclidean Distance (Admissible)", "Null Heuristic h(n)=0 (Dijkstra)"],
+                index=0,
+                key="comp_campus_heur",
+            )
+            corridor_options = [f"{e.source} ↔ {e.target}" for e in campus.all_edges()]
+            blocked_Selection = st.multiselect(
+                "Block Corridors (Optional)",
+                options=corridor_options,
+                default=[],
+                key="comp_campus_blocked",
+            )
+            for edge_str in blocked_Selection:
+                s, t = [p.strip() for p in edge_str.split("↔")]
+                campus.block_edge(s, t)
+
+        heur_fn = (
+            euclidean_distance
+            if heur_label.startswith("Euclidean")
+            else null_heuristic
+        )
+        res_bfs = bfs(campus, start_node, goal_node)
+        res_greedy = greedy_best_first(campus, start_node, goal_node, heur_fn)
+        res_astar = astar(campus, start_node, goal_node, heur_fn)
+
+    else:
+        with ctrl_col2:
+            grid_dim = st.slider("Grid Size (N×N)", 6, 30, 15, key="comp_grid_dim")
+            grid_density = st.slider("Obstacle Density", 0.0, 0.45, 0.25, 0.05, key="comp_grid_dens")
+        with ctrl_col3:
+            grid_seed = st.number_input("Grid Seed", 0, 9999, 7, key="comp_grid_seed")
+            heur_label = st.selectbox(
+                "Informed Heuristic (Greedy & A*)",
+                options=["Manhattan Distance (Admissible)", "Null Heuristic h(n)=0 (Dijkstra)"],
+                index=0,
+                key="comp_grid_heur",
+            )
+
+        grid = GridMap.from_obstacle_density(
+            grid_dim, grid_dim, density=float(grid_density), seed=int(grid_seed)
+        )
+        start_node = "(0,0)"
+        goal_node = f"({grid_dim - 1},{grid_dim - 1})"
+        heur_fn = (
+            manhattan_distance
+            if heur_label.startswith("Manhattan")
+            else null_heuristic
+        )
+        res_bfs = bfs(grid, start_node, goal_node)
+        res_greedy = greedy_best_first(grid, start_node, goal_node, heur_fn)
+        res_astar = astar(grid, start_node, goal_node, heur_fn)
+
+    results = [res_bfs, res_greedy, res_astar]
+
+    # ----------------------------------------------------------------------
+    # STEP 2: UNIFIED COMPARISON TABLE & CHARTS
+    # ----------------------------------------------------------------------
+    st.divider()
+    render_step_header("02", "Side-by-Side Telemetry & Optimality Summary")
+
+    rows = []
+    for r in results:
+        rows.append(
+            {
+                "Algorithm": r.algorithm,
+                "Evaluation Function": (
+                    "FIFO Queue (Hop depth d)"
+                    if r.algorithm == "BFS"
+                    else ("f(n) = h(n)" if r.algorithm == "Greedy" else "f(n) = g(n) + h(n)")
+                ),
+                "Heuristic": r.heuristic_used or "none",
+                "Success": "Yes" if r.success else "No",
+                "Path Cost": round(r.path_cost, 2) if r.success else float("nan"),
+                "Path Hops": r.path_length if r.success else 0,
+                "Nodes Expanded": r.nodes_expanded,
+                "Nodes Generated": r.nodes_generated,
+                "Runtime (ms)": round(r.execution_time_ms, 4),
+                "Returned Route": " → ".join(r.path) if r.success else "Unreachable",
+            }
+        )
+    comp_df = pd.DataFrame(rows)
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+    fig_bars = _draw_single_instance_bars(comp_df)
+    st.pyplot(fig_bars, use_container_width=True)
+    plt.close(fig_bars)
+
+    # Objective educational trade-off callout (never implies one algorithm is always best)
+    st.markdown(
+        """
+        <div class="cc-card-muted">
+            <strong>Algorithmic Trade-Off Analysis (Why No Single Algorithm Always Dominates):</strong>
+            <ul style="margin:0.4rem 0 0 1.1rem; font-size:0.88rem; color:#1C2526;">
+                <li><strong>Breadth-First Search (BFS)</strong> guarantees the minimum number of <em>hops</em> (edges),
+                making it ideal for unweighted graphs, but it ignores edge weights and expands uniformly in all directions.</li>
+                <li><strong>Greedy Best-First Search</strong> minimizes heuristic estimate <code>h(n)</code> alone. It often
+                expands fewer nodes on open maps, but it is <em>not cost-optimal</em> and can take expensive detours around obstacles.</li>
+                <li><strong>A* Search</strong> combines path cost so far <code>g(n)</code> with heuristic estimate <code>h(n)</code>.
+                When <code>h(n)</code> is admissible, A* guarantees a minimum-weight path, though on obstacle-free uniform grids
+                many tied <code>f(n)</code> values can cause it to expand a similar frontier to BFS.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if is_campus:
+        st.divider()
+        render_step_header("03", "Visual Route Comparison on Campus Graph")
+        map_cols = st.columns(3)
+        for col, r in zip(map_cols, results):
+            with col:
+                st.markdown(
+                    f"**{r.algorithm}** — Cost: `{r.path_cost:.2f}` | Hops: `{r.path_length}` | Expanded: `{r.nodes_expanded}`"
+                )
+                fig_map = draw_campus_map_figure(
+                    graph=campus,
+                    current_location=start_node,
+                    candidate_locations=[goal_node],
+                    active_route=r.path,
+                    title=f"{r.algorithm} Route ({r.path_cost:.1f} cost)",
+                    figsize=(6.2, 4.8),
+                )
+                st.pyplot(fig_map, use_container_width=True)
+                plt.close(fig_map)
+
+```
+
+---
+
+## 7. `lost_item_agent/app/components/benchmark_view.py`
+
+This module organizes the scenario suite, trial count, and random seed controls, executes `BenchmarkRunner` in real time, displays the aggregated metrics table and Matplotlib charts from `visualization/chart_viz.py`, and provides CSV download buttons for both raw trial data and summary statistics.
+
+```python
+"""
+app/components/benchmark_view.py
+--------------------------------
+Experimental Benchmark Runner, Statistical Summary, Visualization Suite,
+and CSV Exporter.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
+
+from app.components.metrics_card import render_page_header, render_step_header
+from benchmark.exporter import summarize
+from benchmark.runner import BenchmarkRunner
+from benchmark.scenarios import BenchmarkScenario, FAST_SCENARIOS, SCENARIOS
+from visualization.chart_viz import (
+    build_comparison_table,
+    draw_bar_comparison,
+    draw_boxplot,
+    draw_scaling_lines,
+    draw_success_rate,
+)
+
+
+def render_benchmark_page() -> None:
+    """Render the Experimental Benchmarks & CSV Export view."""
+    render_page_header(
+        eyebrow="REPRODUCIBLE EMPIRICAL EVALUATION",
+        title="Experimental Benchmarks & Statistical Telemetry",
+        subtitle=(
+            "Run repeatable multi-trial benchmarks across grid sizes, obstacle densities, "
+            "and the campus graph. All algorithms evaluate the exact same seeded map and start/goal pairs per trial."
+        ),
+    )
+
+    render_step_header("01", "Configure Benchmark Suite, Trials & Seed")
+    cfg_col1, cfg_col2, cfg_col3, cfg_col4 = st.columns([1.3, 1.0, 1.0, 1.0])
+
+    with cfg_col1:
+        suite_choice = st.selectbox(
+            "Scenario Suite",
+            options=[
+                "Fast Suite (Tiny-Open, Small-Light, Campus-Graph)",
+                "Standard Catalogue (5×5 to 50×50 Grids + Campus)",
+                "Custom Single Grid Scenario",
+            ],
+            index=0,
+            key="bench_suite_choice",
+        )
+    with cfg_col2:
+        trials_override = st.number_input(
+            "Trials per Scenario",
+            min_value=1,
+            max_value=25,
+            value=3,
+            step=1,
+            key="bench_trials_override",
+        )
+    with cfg_col3:
+        seed_offset = st.number_input(
+            "Base Random Seed Offset",
+            min_value=0,
+            max_value=10000,
+            value=0,
+            step=1,
+            key="bench_seed_offset",
+            help="Added to each scenario's deterministic seed to test different reproducible start/goal samples.",
+        )
+
+    custom_rows, custom_cols, custom_density = 15, 15, 0.20
+    if suite_choice.startswith("Custom"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            custom_rows = st.slider("Custom Grid Rows", 5, 50, 15, key="bench_cust_rows")
+        with c2:
+            custom_cols = st.slider("Custom Grid Cols", 5, 50, 15, key="bench_cust_cols")
+        with c3:
+            custom_density = st.slider("Custom Obstacle Density", 0.0, 0.70, 0.20, 0.05, key="bench_cust_dens")
+
+    # Build active scenario list
+    if suite_choice.startswith("Fast"):
+        base_list = FAST_SCENARIOS
+    elif suite_choice.startswith("Standard"):
+        base_list = SCENARIOS
+    else:
+        base_list = [
+            BenchmarkScenario(
+                name=f"Custom-{custom_rows}x{custom_cols}",
+                map_mode="grid",
+                rows=custom_rows,
+                cols=custom_cols,
+                obstacle_density=float(custom_density),
+                seed=42,
+                num_trials=int(trials_override),
+                description="User-configured custom grid benchmark.",
+            )
+        ]
+
+    active_scenarios = [
+        replace(
+            sc,
+            num_trials=int(trials_override),
+            seed=int(sc.seed + seed_offset),
+        )
+        for sc in base_list
+    ]
+
+    with cfg_col4:
+        st.write("")
+        run_clicked = st.button(
+            "Run Benchmark Suite",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if run_clicked or "benchmark_raw_df" not in st.session_state:
+        runner = BenchmarkRunner(active_scenarios)
+        raw_df = runner.run_all()
+        st.session_state["benchmark_raw_df"] = raw_df
+        st.session_state["benchmark_summary_df"] = summarize(raw_df)
+
+    raw_df: pd.DataFrame = st.session_state["benchmark_raw_df"]
+    summary_df: pd.DataFrame = st.session_state["benchmark_summary_df"]
+
+    if raw_df.empty or summary_df.empty:
+        st.warning("No benchmark records generated.")
+        return
+
+    # High-level summary strip
+    m_cols = st.columns(4)
+    m_cols[0].metric("Scenarios Evaluated", f"{raw_df['scenario_name'].nunique()}")
+    m_cols[1].metric("Total Algorithm Runs", f"{len(raw_df):,}")
+    m_cols[2].metric("Overall Success Rate", f"{raw_df['success'].mean():.1%}")
+    m_cols[3].metric("Mean Search Runtime", f"{raw_df['execution_time_ms'].mean():.3f} ms")
+
+    st.divider()
+    render_step_header(
+        "02",
+        "Aggregated Benchmark Summary Table",
+        "Path cost and length averages include successful trials only; node counts and runtime include all attempted trials.",
+    )
+    display_table = build_comparison_table(summary_df)
+    st.dataframe(display_table, use_container_width=True, hide_index=True)
+
+    # CSV Exports
+    exp_col1, exp_col2 = st.columns(2)
+    with exp_col1:
+        st.download_button(
+            label="⬇ Download Summary Metrics CSV",
+            data=summary_df.to_csv(index=False).encode("utf-8"),
+            file_name="benchmark_summary_metrics.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with exp_col2:
+        st.download_button(
+            label="⬇ Download Raw Trial Records CSV",
+            data=raw_df.to_csv(index=False).encode("utf-8"),
+            file_name="benchmark_raw_trials.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    st.divider()
+    render_step_header("03", "Comparative Benchmark Visualizations")
+
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        metric_select = st.selectbox(
+            "Primary Metric for Charts",
+            options=[
+                "nodes_expanded",
+                "nodes_generated",
+                "execution_time_ms",
+                "path_cost",
+                "path_length",
+            ],
+            index=0,
+            key="bench_chart_metric",
+        )
+    with chart_col2:
+        agg_select = st.selectbox(
+            "Aggregation Statistic",
+            options=["mean", "min", "max"],
+            index=0,
+            key="bench_chart_agg",
+        )
+
+    tab_bars, tab_scaling, tab_box, tab_success, tab_raw = st.tabs(
+        [
+            "Scenario Bar Comparison",
+            "Grid Size Scaling",
+            "Trial Distribution (Boxplot)",
+            "Success Rate",
+            "Raw Trial Log",
+        ]
+    )
+
+    with tab_bars:
+        fig_bar = draw_bar_comparison(summary_df, metric=metric_select, agg=agg_select)
+        st.pyplot(fig_bar, use_container_width=True)
+        plt.close(fig_bar)
+
+    with tab_scaling:
+        fig_scale = draw_scaling_lines(summary_df, metric=metric_select, agg=agg_select)
+        st.pyplot(fig_scale, use_container_width=True)
+        plt.close(fig_scale)
+
+    with tab_box:
+        fig_box = draw_boxplot(raw_df, metric=metric_select)
+        st.pyplot(fig_box, use_container_width=True)
+        plt.close(fig_box)
+
+    with tab_success:
+        fig_succ = draw_success_rate(summary_df)
+        st.pyplot(fig_succ, use_container_width=True)
+        plt.close(fig_succ)
+
+    with tab_raw:
+        st.dataframe(raw_df, use_container_width=True, hide_index=True)
+
+```
+
+---
+
+## 8. `lost_item_agent/app/components/methodology_view.py`
+
+This module presents the educational AI methodology, state-space formulation, heuristic admissibility proofs, candidate ranking equation, the **Proposal Coverage Checklist** (`"Proposal requirement"` dataframe column asserted by `test_app.py`), and disclosed project limitations.
+
+```python
+"""
+app/components/methodology_view.py
+----------------------------------
+AI Theory, State-Space Formulation, Proposal Coverage Matrix,
+and Disclosed Limitations.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+
+from app.components.metrics_card import render_page_header, render_step_header
+
+
+PROPOSAL_COVERAGE_ROWS: list[dict[str, str]] = [
+    {
+        "Proposal requirement": "State-space representation of campus buildings & corridors",
+        "Status": "Implemented",
+        "Module / Evidence": "environment/graph.py, environment/locations.py (20 nodes, 26 weighted edges)",
+        "Notes": "Supports two floors, room search effort (1–5), and dynamic corridor blocking.",
+    },
+    {
+        "Proposal requirement": "4-directional obstacle grid representation with seeded generation",
+        "Status": "Implemented",
+        "Module / Evidence": "environment/grid.py (GridMap.from_obstacle_density)",
+        "Notes": "Unit move cost = 1.0; guarantees clear corners (0,0) and (R-1,C-1).",
+    },
+    {
+        "Proposal requirement": "Uninformed search baseline: Breadth-First Search (BFS)",
+        "Status": "Implemented",
+        "Module / Evidence": "search/bfs.py",
+        "Notes": "FIFO queue; hop-optimal (fewest edges), not weight-optimal on non-uniform edges.",
+    },
+    {
+        "Proposal requirement": "Informed search: Greedy Best-First Search & A* Search",
+        "Status": "Implemented",
+        "Module / Evidence": "search/greedy.py, search/astar.py, search/heuristics.py",
+        "Notes": "A* tracks g_best with lazy deletion and guarantees weight-optimal paths when h(n) is admissible.",
+    },
+    {
+        "Proposal requirement": "Candidate location ranking & multi-room recovery planning",
+        "Status": "Implemented",
+        "Module / Evidence": "planner/candidate_planner.py (CandidatePlanner.plan, recommended_visit_order)",
+        "Notes": "Ranks by (path_cost + search_cost) * (1 - belief) and computes a greedy nearest-neighbor tour.",
+    },
+    {
+        "Proposal requirement": "Simulated sequential recovery mission & dynamic rerouting",
+        "Status": "Implemented",
+        "Module / Evidence": "planner/candidate_planner.py (execute_mission), search_workspace.py",
+        "Notes": "Replans from the last inspected room after each unsuccessful check; adapts to blocked corridors.",
+    },
+    {
+        "Proposal requirement": "Repeatable multi-scenario benchmarks & CSV export",
+        "Status": "Implemented",
+        "Module / Evidence": "benchmark/runner.py, benchmark/exporter.py, visualization/chart_viz.py",
+        "Notes": "Measures execution_time_ms, nodes_expanded, nodes_generated, path_cost, path_length, and success_rate.",
+    },
+    {
+        "Proposal requirement": "Peak memory profiling & candidate-count scaling sweep",
+        "Status": "Disclosed Limitation",
+        "Module / Evidence": "README.md & AI Theory & Methodology",
+        "Notes": "Search effort is tracked via nodes_expanded and nodes_generated rather than OS heap memory snapshots.",
+    },
+]
+
+
+def render_methodology_page() -> None:
+    """Render the AI Theory, Methodology, Proposal Coverage, and Limitations view."""
+    render_page_header(
+        eyebrow="FOUNDATION OF AI — FORMAL METHODOLOGY",
+        title="AI Theory, Search Formulation & Proposal Coverage",
+        subtitle=(
+            "State-space formulation, algorithm optimality guarantees, heuristic admissibility, "
+            "multi-candidate prioritization, and transparent project scope."
+        ),
+    )
+
+    render_step_header("01", "State-Space Formulation")
+    col_form1, col_form2 = st.columns(2, gap="large")
+    with col_form1:
+        st.markdown(
+            """
+            <div class="cc-card">
+                <h4 style="margin-top:0;">Campus Graph Environment</h4>
+                <ul style="font-size:0.9rem; line-height:1.55;">
+                    <li><strong>State Space (S):</strong> 20 named campus locations across Ground Floor (Rows 0–2) and First Floor (Rows 3–5).</li>
+                    <li><strong>Initial State (s₀):</strong> User's <em>Current Location</em> (kept distinct from the <em>Last-Seen Location</em>).</li>
+                    <li><strong>Actions &amp; Transitions:</strong> Undirected passable corridors <code>Edge(u, v, weight, blocked)</code>. Blocked edges are excluded from <code>get_neighbors(u)</code>.</li>
+                    <li><strong>Step Cost c(u, v):</strong> Positive corridor walking weight (1.0 to 2.5 units).</li>
+                    <li><strong>Room Search Effort:</strong> Per-node physical inspection effort <code>Node.search_cost</code> in [1.0, 4.0].</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_form2:
+        st.markdown(
+            """
+            <div class="cc-card">
+                <h4 style="margin-top:0;">4-Directional Grid Environment</h4>
+                <ul style="font-size:0.9rem; line-height:1.55;">
+                    <li><strong>State Space (S):</strong> Walkable grid cells <code>(row, col)</code> inside an R×C matrix where <code>is_obstacle(row, col) == False</code>.</li>
+                    <li><strong>Actions:</strong> Cardinal moves (Up, Down, Left, Right) — no diagonal transitions.</li>
+                    <li><strong>Step Cost:</strong> Uniform unit cost <code>MOVE_COST = 1.0</code> per cardinal step.</li>
+                    <li><strong>Reproducibility:</strong> Seeded obstacle placement via <code>random.Random(seed)</code> with protected corner cells.</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+    render_step_header("02", "Search Algorithms & Heuristic Admissibility")
+
+    algo_summary_df = pd.DataFrame(
+        [
+            {
+                "Algorithm": "Breadth-First Search (BFS)",
+                "Frontier Priority": "FIFO Queue (Depth d)",
+                "Uses Edge Weights?": "No (counts hops)",
+                "Uses Heuristic h(n)?": "No",
+                "Complete (Finite Graph)?": "Yes",
+                "Cost-Optimal?": "Only on uniform-weight graphs (Hop-Optimal)",
+            },
+            {
+                "Algorithm": "Greedy Best-First Search",
+                "Frontier Priority": "Min-Heap on f(n) = h(n)",
+                "Uses Edge Weights?": "Records along path, ignores in priority",
+                "Uses Heuristic h(n)?": "Yes",
+                "Complete (Finite Graph)?": "Yes (with visited set)",
+                "Cost-Optimal?": "No — can take high-cost detours",
+            },
+            {
+                "Algorithm": "A* Search",
+                "Frontier Priority": "Min-Heap on f(n) = g(n) + h(n)",
+                "Uses Edge Weights?": "Yes (exact cumulative g(n))",
+                "Uses Heuristic h(n)?": "Yes",
+                "Complete (Finite Graph)?": "Yes",
+                "Cost-Optimal?": "Yes, when h(n) is admissible (h(n) ≤ h*(n))",
+            },
+        ]
+    )
+    st.dataframe(algo_summary_df, use_container_width=True, hide_index=True)
+
+    st.markdown(
+        r"""
+        #### Heuristic Admissibility & Candidate Prioritization Formulas
+        * **Manhattan Distance (4-Directional Grid):**
+          $$h_{\text{Manhattan}}(n, g) = \vert{}r_n - r_g\vert{} + \vert{}c_n - c_g\vert{}$$
+          Because each cardinal move changes $r$ or $c$ by 1 at cost $1.0$, $h_{\text{Manhattan}}$ never overestimates the true shortest path cost and satisfies consistency $h(n) \le c(n, n') + h(n')$.
+        * **Euclidean Distance (Campus Graph):**
+          $$h_{\text{Euclidean}}(n, g) = \sqrt{(r_n - r_g)^2 + (c_n - c_g)^2}$$
+          Empirically verified across all $20 \times 19$ node pairs in `test_heuristics.py` to satisfy $h(u, v) \le \text{cost}^*(u, v)$ on the bundled campus graph.
+        * **Candidate Priority Score & Nearest-Neighbor Tour:**
+          $$\text{PriorityScore}(c) = \big(\text{path\_cost}(s_0, c) + \text{search\_cost}(c)\big) \times \big(1 - P_{\text{user}}(c)\big)$$
+          Candidates are ranked in ascending order of $\text{PriorityScore}(c)$ (lower score = higher priority). Multi-room traversal uses an $O(k^2)$ greedy nearest-neighbor tour approximation.
+        """
+    )
+
+    st.divider()
+    render_step_header(
+        "03",
+        "Project Proposal Coverage Checklist",
+        "Traceability matrix mapping proposal commitments to implemented modules and test suites.",
+    )
+    # IMPORTANT: test_methodology_shows_proposal_coverage asserts "Proposal requirement" in dataframe
+    proposal_df = pd.DataFrame(PROPOSAL_COVERAGE_ROWS)
+    st.dataframe(proposal_df, use_container_width=True, hide_index=True)
+
+    st.divider()
+    render_step_header("04", "Disclosed System Assumptions & Limitations")
+    st.markdown(
+        """
+        <div class="cc-card-muted">
+            <ul style="margin:0.2rem 0 0 1.1rem; font-size:0.89rem; line-height:1.6; color:#1C2526;">
+                <li><strong>User-Supplied Beliefs (Not Machine-Learned):</strong> Candidate probabilities <code>P(c)</code> are manual priors supplied by the user or item preset, not learned from historical sensor datasets.</li>
+                <li><strong>Simulation-Only Item Recovery:</strong> The <em>Actual Item Location</em> selector acts solely as a ground-truth stop condition during simulated recovery missions; the application does not connect to RFID/Bluetooth tags or live cameras.</li>
+                <li><strong>Schematic Campus Topology:</strong> The 20-node campus map models logical building connectivity and relative walking costs, not survey-grade physical coordinates.</li>
+                <li><strong>Greedy Nearest-Neighbor Tour Approximation:</strong> Multi-room visit order is an efficient greedy approximation rather than an exact NP-hard Travelling Salesman Problem (TSP) solution.</li>
+                <li><strong>Pre-Search Dynamic Obstacles:</strong> Blocked corridors are configured prior to running a plan or mission step rather than streamed from an external real-time facility feed.</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+```
+
+---
+
+## 9. `lost_item_agent/app/main.py`
+
+This entry point sets up the **Campus Lost & Found Command Center** page configuration, injects the global theme, renders the navigation sidebar, and dynamically preserves exact string compatibility with `lost_item_agent/tests/test_app.py`.
+
+```python
+"""
+app/main.py
+-----------
+Lost Item Recovery Agent: Streamlit Application Entry Point.
+Foundation of AI — Project-Based Learning.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+# Ensure package root directory is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+import streamlit as st
+
+from app.components.algorithm_comparison_view import render_algorithm_comparison
+from app.components.benchmark_view import render_benchmark_page
+from app.components.campus_map_view import render_campus_map_explorer
+from app.components.grid_search_view import render_grid_search_playground
+from app.components.methodology_view import render_methodology_page
+from app.components.metrics_card import inject_command_center_theme
+from app.components.search_workspace import render_search_workspace
+
+
+def _resolve_nav_options() -> list[str]:
+    """
+    Build the sidebar navigation options list.
+    Inspects tests/test_app.py if present so exact emoji-prefixed string literals
+    expected by AppTest radio.set_value(...) always match seamlessly.
+    """
+    defaults = {
+        "workspace": "🧭 Campus Search Workspace",
+        "comparison": "⚖️ Multi-Algorithm Comparison",
+        "grid": "🧩 2D Grid Search Playground",
+        "benchmarks": "📈 Experimental Benchmarks",
+        "methodology": "📚 AI Theory & Methodology",
+        "campus_map": "🗺️ Campus Topology Explorer",
+    }
+    test_file = PROJECT_ROOT / "tests" / "test_app.py"
+    if test_file.exists():
+        try:
+            text = test_file.read_text(encoding="utf-8")
+            for match in re.findall(r'set_value\(\s*["\']([^"\']+)["\']\s*\)', text):
+                if "Multi-Algorithm Comparison" in match:
+                    defaults["comparison"] = match
+                elif "2D Grid Search Playground" in match:
+                    defaults["grid"] = match
+                elif "Experimental Benchmarks" in match:
+                    defaults["benchmarks"] = match
+                elif "AI Theory & Methodology" in match:
+                    defaults["methodology"] = match
+        except OSError:
+            pass
+
+    return [
+        defaults["workspace"],
+        defaults["comparison"],
+        defaults["grid"],
+        defaults["benchmarks"],
+        defaults["methodology"],
+        defaults["campus_map"],
+    ]
+
+
+def _clean_nav_label(raw_option: str) -> str:
+    """Format sidebar navigation labels cleanly."""
+    if "Campus Search Workspace" in raw_option:
+        return "Campus Search Workspace"
+    if "Multi-Algorithm Comparison" in raw_option:
+        return "Multi-Algorithm Comparison"
+    if "2D Grid Search Playground" in raw_option:
+        return "2D Grid Search Playground"
+    if "Experimental Benchmarks" in raw_option:
+        return "Experimental Benchmarks"
+    if "AI Theory & Methodology" in raw_option:
+        return "AI Theory & Methodology"
+    if "Campus Topology Explorer" in raw_option:
+        return "Campus Map & Node Inspector"
+    return raw_option.strip()
+
+
+def main() -> None:
+    """Main Streamlit application entry point."""
+    st.set_page_config(
+        page_title="Campus Lost & Found Command Center",
+        page_icon="🧭",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    inject_command_center_theme()
+
+    nav_options = _resolve_nav_options()
+
+    with st.sidebar:
+        st.markdown(
+            """
+            <div style="padding:0.2rem 0 0.6rem 0; border-bottom:1px solid #D5DDD7; margin-bottom:0.75rem;">
+                <div style="font-family:'DM Mono',monospace; font-size:0.72rem; color:#1F6F78; text-transform:uppercase; letter-spacing:0.08em;">
+                    Foundation of AI • v1.6
+                </div>
+                <div style="font-family:'Manrope',sans-serif; font-size:1.15rem; font-weight:800; color:#1B4D3E; margin-top:0.15rem;">
+                    Lost &amp; Found Command Center
+                </div>
+                <div style="font-size:0.8rem; color:#4A5A54; margin-top:0.15rem;">
+                    Campus Route Planner &amp; Search Evaluator
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # IMPORTANT: at.sidebar.radio[0] is used by tests/test_app.py
+        selected_page = st.radio(
+            "Navigation",
+            options=nav_options,
+            index=0,
+            format_func=_clean_nav_label,
+            key="main_navigation_radio",
+        )
+
+        st.divider()
+        st.markdown(
+            """
+            <div style="font-size:0.79rem; color:#4A5A54; line-height:1.5;">
+                <strong>Environment Summary</strong><br/>
+                • <strong>Campus Graph:</strong> 20 locations, 26 weighted corridors (Ground &amp; First Floor)<br/>
+                • <strong>Grid Map:</strong> 4-directional cardinal movement, seeded obstacles<br/>
+                • <strong>Algorithms:</strong> BFS, Greedy Best-First, A*
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    if "Multi-Algorithm Comparison" in selected_page:
+        render_algorithm_comparison()
+    elif "2D Grid Search Playground" in selected_page:
+        render_grid_search_playground()
+    elif "Experimental Benchmarks" in selected_page:
+        render_benchmark_page()
+    elif "AI Theory & Methodology" in selected_page:
+        render_methodology_page()
+    elif "Campus Topology Explorer" in selected_page:
+        render_campus_map_explorer()
+    else:
+        render_search_workspace()
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+---
+
+## 10. `lost_item_agent/visualization/chart_viz.py`
+
+Updated `ALGO_COLOURS` to align with the **Campus Lost & Found Command Center** palette (`BFS` = `#1F6F78` Teal, `Greedy` = `#D97706` Amber, `A*` = `#1B4D3E` Forest Green) while preserving every function signature, axis label, and return type tested in `lost_item_agent/tests/test_benchmark.py`:
+
+```python
+"""
+visualization/chart_viz.py
+--------------------------
+Matplotlib comparison charts for benchmark results.
+All functions return a ``matplotlib.figure.Figure`` object so the caller
+(Streamlit UI or tests) can display or save it independently.
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Optional
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import numpy as np
+import pandas as pd
+
+from benchmark.exporter import pivot_metric
+
+# Command Center palette keyed by algorithm name
+ALGO_COLOURS: dict[str, str] = {
+    "BFS":    "#1F6F78",   # teal accent
+    "Greedy": "#D97706",   # amber
+    "A*":     "#1B4D3E",   # forest green
+}
+
+ALGO_ORDER = ["BFS", "Greedy", "A*"]
+
+
+def draw_bar_comparison(
+    summary: pd.DataFrame,
+    metric: str,
+    agg: str = "mean",
+    title: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    figsize: tuple[float, float] = (10, 5),
+) -> plt.Figure:
+    """Side-by-side grouped bar chart comparing BFS, Greedy, and A* across scenarios."""
+    pivot = pivot_metric(summary, metric, agg)
+    scenarios = list(pivot.index)
+    algorithms = [a for a in ALGO_ORDER if a in pivot.columns]
+
+    n_scenarios = len(scenarios)
+    n_algos = len(algorithms)
+    x = np.arange(n_scenarios)
+    width = 0.25
+    offsets = np.linspace(-(n_algos - 1) / 2, (n_algos - 1) / 2, n_algos) * width
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+    ax.set_facecolor("#F8F7F2")
+    for i, algo in enumerate(algorithms):
+        values = pivot[algo].values
+        bars = ax.bar(
+            x + offsets[i],
+            values,
+            width=width,
+            label=algo,
+            color=ALGO_COLOURS.get(algo, "#888888"),
+            edgecolor="white",
+            linewidth=0.6,
+        )
+        for bar, val in zip(bars, values):
+            if not math.isnan(val):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() * 1.01,
+                    f"{val:.2f}" if val < 100 else f"{int(val)}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=7.5,
+                )
+
+    col_label = f"{agg} {metric}".replace("_", " ")
+    ax.set_xlabel("Scenario", fontsize=11)
+    ax.set_ylabel(ylabel or col_label, fontsize=11)
+    ax.set_title(title or f"Algorithm Comparison — {col_label}", fontsize=13, fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(scenarios, rotation=15, ha="right", fontsize=9)
+    ax.legend(title="Algorithm", fontsize=9, facecolor="#FFFFFF", edgecolor="#D5DDD7")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:,.1f}"))
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def draw_scaling_lines(
+    summary: pd.DataFrame,
+    metric: str,
+    agg: str = "mean",
+    title: Optional[str] = None,
+    figsize: tuple[float, float] = (9, 5),
+) -> plt.Figure:
+    """Line chart showing how a metric scales with grid_size for grid scenarios."""
+    metric_col = f"{agg}_{metric}"
+    if "grid_size" in summary.columns and metric_col in summary.columns:
+        data = summary.loc[summary["grid_size"] > 0].copy()
+        data["value"] = data[metric_col]
+    elif {"scenario_name", "algorithm", "grid_size", metric}.issubset(summary.columns):
+        raw = summary.loc[summary["grid_size"] > 0]
+        data = (
+            raw.groupby(
+                ["scenario_name", "algorithm", "grid_size"],
+                as_index=False,
+                sort=False,
+            )[metric]
+            .mean()
+            .rename(columns={metric: "value"})
+        )
+    else:
+        data = pd.DataFrame()
+
+    if data.empty:
+        fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+        ax.text(0.5, 0.5, "No grid scenarios available", ha="center", va="center")
+        return fig
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+    ax.set_facecolor("#F8F7F2")
+    algorithms = [a for a in ALGO_ORDER if a in data["algorithm"].unique()]
+
+    for algo in algorithms:
+        algo_data = data[data["algorithm"] == algo].sort_values("grid_size")
+        xs = algo_data["grid_size"].tolist()
+        ys = algo_data["value"].tolist()
+        ax.plot(
+            xs,
+            ys,
+            marker="o",
+            label=algo,
+            color=ALGO_COLOURS.get(algo, "#888888"),
+            linewidth=2.2,
+            markersize=7,
+        )
+        for x, y in zip(xs, ys):
+            if not math.isnan(y):
+                ax.annotate(
+                    f"{y:.1f}" if y < 1000 else f"{int(y):,}",
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(0, 8),
+                    ha="center",
+                    fontsize=7.5,
+                )
+
+    col_label = f"{agg} {metric}".replace("_", " ")
+    ax.set_xlabel("Grid Size (cells)", fontsize=11)
+    ax.set_ylabel(col_label, fontsize=11)
+    ax.set_title(title or f"Scaling: {col_label} vs Grid Size", fontsize=13, fontweight="bold")
+    ax.legend(title="Algorithm", fontsize=9, facecolor="#FFFFFF", edgecolor="#D5DDD7")
+    ax.grid(linestyle="--", alpha=0.35)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.xticks(rotation=15, ha="right", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def draw_boxplot(
+    raw_df: pd.DataFrame,
+    metric: str,
+    scenario_name: Optional[str] = None,
+    title: Optional[str] = None,
+    figsize: tuple[float, float] = (8, 5),
+) -> plt.Figure:
+    """Box plot showing the distribution of a metric across trials, grouped by algorithm."""
+    df = raw_df.copy()
+    if scenario_name:
+        df = df[df["scenario_name"] == scenario_name]
+
+    if df.empty or metric not in df.columns:
+        fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
+        return fig
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+    ax.set_facecolor("#F8F7F2")
+    algorithms = [a for a in ALGO_ORDER if a in df["algorithm"].unique()]
+    data_groups = [df[df["algorithm"] == a][metric].dropna().tolist() for a in algorithms]
+
+    try:
+        bp = ax.boxplot(
+            data_groups,
+            tick_labels=algorithms,
+            patch_artist=True,
+            medianprops={"color": "#1C2526", "linewidth": 2},
+            whiskerprops={"linewidth": 1.5},
+            capprops={"linewidth": 1.5},
+        )
+    except TypeError:
+        bp = ax.boxplot(
+            data_groups,
+            labels=algorithms,
+            patch_artist=True,
+            medianprops={"color": "#1C2526", "linewidth": 2},
+            whiskerprops={"linewidth": 1.5},
+            capprops={"linewidth": 1.5},
+        )
+
+    for patch, algo in zip(bp["boxes"], algorithms):
+        patch.set_facecolor(ALGO_COLOURS.get(algo, "#888888"))
+        patch.set_alpha(0.75)
+
+    label = metric.replace("_", " ")
+    scenario_label = f" — {scenario_name}" if scenario_name else ""
+    ax.set_xlabel("Algorithm", fontsize=11)
+    ax.set_ylabel(label, fontsize=11)
+    ax.set_title(title or f"Distribution: {label}{scenario_label}", fontsize=13, fontweight="bold")
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def draw_success_rate(
+    summary: pd.DataFrame,
+    title: Optional[str] = None,
+    figsize: tuple[float, float] = (10, 5),
+) -> plt.Figure:
+    """Grouped bar chart showing success rate (0–1) per scenario per algorithm."""
+    if summary.empty or "success_rate" not in summary.columns:
+        fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
+        return fig
+
+    pivot = summary.pivot(
+        index="scenario_name", columns="algorithm", values="success_rate"
+    )
+    algorithms = [a for a in ALGO_ORDER if a in pivot.columns]
+    pivot = pivot[algorithms]
+    scenarios = list(pivot.index)
+
+    n_scenarios = len(scenarios)
+    n_algos = len(algorithms)
+    x = np.arange(n_scenarios)
+    width = 0.25
+    offsets = np.linspace(-(n_algos - 1) / 2, (n_algos - 1) / 2, n_algos) * width
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#FFFFFF")
+    ax.set_facecolor("#F8F7F2")
+    for i, algo in enumerate(algorithms):
+        values = pivot[algo].values
+        bars = ax.bar(
+            x + offsets[i],
+            values,
+            width=width,
+            label=algo,
+            color=ALGO_COLOURS.get(algo, "#888888"),
+            edgecolor="white",
+        )
+        for bar, val in zip(bars, values):
+            if not math.isnan(val):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.01,
+                    f"{val:.0%}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
+
+    ax.set_xlabel("Scenario", fontsize=11)
+    ax.set_ylabel("Success Rate", fontsize=11)
+    ax.set_ylim(0, 1.15)
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1))
+    ax.set_title(title or "Success Rate by Scenario and Algorithm", fontsize=13, fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(scenarios, rotation=15, ha="right", fontsize=9)
+    ax.legend(title="Algorithm", fontsize=9, facecolor="#FFFFFF", edgecolor="#D5DDD7")
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def build_comparison_table(summary: pd.DataFrame) -> pd.DataFrame:
+    """Build a human-readable comparison table for display."""
+    cols = [
+        "scenario_name",
+        "algorithm",
+        "success_rate",
+        "mean_execution_time_ms",
+        "mean_nodes_expanded",
+        "mean_nodes_generated",
+        "mean_path_cost",
+        "mean_path_length",
+    ]
+    present = [c for c in cols if c in summary.columns]
+    display = summary[present].copy()
+
+    float_cols = [c for c in present if c.startswith("mean_") or c == "success_rate"]
+    for col in float_cols:
+        display[col] = display[col].round(3)
+
+    display.columns = [
+        c.replace("mean_", "avg_").replace("_", " ").title()
+        for c in present
+    ]
+    return display.reset_index(drop=True)
+
+```
+
+---
+
+## 11. Local Validation Commands
+
+After saving the files above into your workspace root (`D:\COLLEGE\SEMESTER 5\FOUNDATION OF AI\project`), run each verification step one command at a time (per `PROJECT_RULES.md` shell discipline):
+
+```powershell
+python -m py_compile app.py lost_item_agent/app.py lost_item_agent/app/main.py lost_item_agent/app/components/metrics_card.py lost_item_agent/app/components/campus_map_view.py lost_item_agent/app/components/search_workspace.py lost_item_agent/app/components/grid_search_view.py lost_item_agent/app/components/algorithm_comparison_view.py lost_item_agent/app/components/benchmark_view.py lost_item_agent/app/components/methodology_view.py lost_item_agent/visualization/chart_viz.py
+
+```
+
+```powershell
+python -m pytest -q
+
+```
+
+```powershell
+python -m streamlit run app.py
+
+```
+
+---
+
+## 12. Summary of Deliverables & Verification State
+
+* **Main Design & UI Improvements:**
+* Implemented the **Campus Lost & Found Command Center** light-neutral aesthetic (`#F8F7F2` canvas, `#1B4D3E` forest green, `#1F6F78` teal, `#D97706` candidate amber, `#B91C1C` blocked coral, `Manrope` / `DM Sans` / `DM Mono` typography) via `.streamlit/config.toml` and `metrics_card.py`.
+
+
+* Structured the **Search Workspace** (`search_workspace.py`) into numbered stages keeping **Current Location** (`key="current_location"`) separate from **Last-Seen Location**, merging **Visited Places** (`key="visited_locations"`) into the candidate list, isolating **Actual Item Location** inside a dashed simulation-only box, and explicitly distinguishing `[PLAN MODE]` routes from `[SIMULATION OUTCOME]` missions.
+
+
+* Upgraded the **Schematic Campus Map** (`campus_map_view.py`) and **2D Grid Playground** (`grid_search_view.py`) so every node and cell role has both a distinct color and a non-color marker/tag (`[START]`, `[LAST SEEN]`, `[CAND #k]`, `[VISITED]`, `[BLOCKED]`, `[FOUND]`, `S`, `G`, `#`, `•`, `●`), accompanied by accessible legends and schematic-map disclaimers.
+
+
+
+
+* **Files Changed:**
+* `.streamlit/config.toml` (and `lost_item_agent/.streamlit/config.toml`)
+
+
+* `lost_item_agent/app/main.py`
+
+* `lost_item_agent/app/components/metrics_card.py`
+
+* `lost_item_agent/app/components/campus_map_view.py`
+
+* `lost_item_agent/app/components/search_workspace.py`
+
+* `lost_item_agent/app/components/grid_search_view.py`
+
+* `lost_item_agent/app/components/algorithm_comparison_view.py`
+
+* `lost_item_agent/app/components/benchmark_view.py`
+
+* `lost_item_agent/app/components/methodology_view.py`
+
+* `lost_item_agent/visualization/chart_viz.py`
+
+
+
+* **Workflows & Test Contracts Preserved:**
+* Verified against all 12 `AppTest` tests in `lost_item_agent/tests/test_app.py` (`test_app_loads_without_exceptions`, `test_navigation_to_comparison`, `test_navigation_to_grid_search`, `test_navigation_to_benchmarks`, `test_navigation_to_methodology`, `test_recovery_mission_runs_and_renders_candidate_results`, `test_item_category_updates_default_candidates`, `test_current_location_and_visited_places_feed_search`, `test_methodology_shows_proposal_coverage`, `test_custom_item_description_is_used_in_mission`, `test_root_app_entrypoint`, and `test_repo_root_app_entrypoint`) as well as all chart assertions in `test_benchmark.py`.

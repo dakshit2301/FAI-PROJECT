@@ -33,29 +33,27 @@ Install dependencies from the repository root using `requirements.txt`.
 
 ```text
 project/
-├── app.py                         # Root-level website launcher
-├── README.md
+├── app.py                         # Local website launcher
+├── backend/
+│   ├── web/server.py              # Flask routes and search API
+│   ├── environment/               # Campus graph and grid models
+│   ├── search/                    # BFS, Greedy, A*, heuristics
+│   ├── planner/                   # Candidate ranking and recovery planning
+│   ├── benchmark/                 # Scenarios, runner, and CSV support
+│   ├── visualization/             # Benchmark chart utilities
+│   └── tests/                     # Search, planner, benchmark, and API tests
+├── frontend/
+│   ├── index.html                 # Website structure
+│   ├── styles.css                 # Website styling
+│   └── app.js                     # Browser interactions and maps
 ├── requirements.txt
 ├── pytest.ini
-├── lost_item_agent/
-│   ├── web/
-│   │   ├── server.py              # Flask routes and Python search API
-│   │   └── static/
-│   │       ├── index.html         # Website structure
-│   │       ├── styles.css         # Website styling
-│   │       └── app.js             # Browser interactions and SVG maps
-│   ├── environment/               # Campus graph, grid, nodes, edges, results
-│   ├── search/                    # BFS, Greedy, A*, heuristic functions
-│   ├── planner/                   # Candidate ranking and mission planning
-│   ├── benchmark/                 # Scenarios, runner, summaries, CSV support
-│   ├── visualization/             # Python benchmark chart utilities
-│   └── tests/                     # Search, planner, benchmark, and API tests
-└── requirements.txt
+└── README.md
 ```
 
 ## Windows setup and launch
 
-From PowerShell in the repository root:
+From PowerShell in the repository root (the folder containing `app.py`):
 
 ```powershell
 python -m venv .venv
@@ -65,13 +63,6 @@ python app.py
 ```
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). The server listens on localhost only.
-
-To start from inside `lost_item_agent` instead:
-
-```powershell
-python -m pip install -r requirements.txt
-python app.py
-```
 
 ## Search and planning details
 
