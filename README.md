@@ -290,15 +290,6 @@ Recommended evaluation metrics:
 - Evaluate larger maps and additional test scenarios.
 - Explore integration with validated real-world campus maps.
 
-## References
-
-1. Dijkstra, E. W. (1959). A note on two problems in connexion with graphs. *Numerische Mathematik, 1*, 269–271.
-2. Hart, P. E., Nilsson, N. J., & Raphael, B. (1968). A formal basis for the heuristic determination of minimum cost paths. *IEEE Transactions on Systems Science and Cybernetics, 4*(2), 100–107. https://doi.org/10.1109/TSSC.1968.300136
-3. Russell, S. J., & Norvig, P. (2021). *Artificial intelligence: A modern approach* (4th ed.). Pearson.
-4. Python Software Foundation. Python documentation. https://docs.python.org/3/
-5. Pallets. Flask documentation. https://flask.palletsprojects.com/
-6. pytest development team. pytest documentation. https://docs.pytest.org/
-
 ## Authors
 
 - Krushal Patel
