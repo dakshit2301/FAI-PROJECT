@@ -66,6 +66,8 @@ AlgorithmName = Literal["bfs", "greedy", "astar"]
 
 # Default probability belief when user provides none
 DEFAULT_PROBABILITY: float = 0.5
+# Elevated default belief when a location is explicitly identified as last-seen
+LAST_SEEN_DEFAULT_PROBABILITY: float = 0.75
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +101,8 @@ class CandidateResult:
     rank : int
         Position in the sorted visit order (1 = search first).
         Set to 0 until ``CandidatePlanner.plan()`` assigns ranks.
+    is_last_seen : bool
+        Whether this candidate was designated as the last-seen location.
     """
 
     candidate: str
@@ -109,6 +113,7 @@ class CandidateResult:
     priority_score: float
     algorithm_result: SearchResult
     rank: int = 0
+    is_last_seen: bool = False
 
     @property
     def reachable(self) -> bool:
@@ -123,6 +128,7 @@ class CandidateResult:
         return {
             "rank": self.rank,
             "candidate": self.candidate,
+            "is_last_seen": self.is_last_seen,
             "reachable": self.reachable,
             "pathfinding_cost": self.pathfinding_cost,
             "search_cost": self.search_cost,
@@ -188,6 +194,7 @@ class CandidatePlanner:
         start: str,
         candidates: list[str],
         probabilities: Optional[dict[str, float]] = None,
+        last_seen: Optional[str] = None,
     ) -> list[CandidateResult]:
         """
         Run pathfinding from *start* to every candidate and rank them.
@@ -195,15 +202,23 @@ class CandidatePlanner:
         Parameters
         ----------
         start : str
-            Current / last-known position.
+            Current location of the searcher/agent (where physical movement begins).
         candidates : list[str]
-            Location names to consider.  May include duplicates or invalid
-            names — duplicates are deduplicated, invalid names produce a
-            failed CandidateResult.
+            Location names to consider as possible item locations. May include
+            duplicates or invalid names — duplicates are deduplicated, invalid
+            names produce a failed CandidateResult.
         probabilities : dict[str, float], optional
-            Mapping of candidate_name → probability belief (0.0–1.0).
-            Missing candidates default to ``DEFAULT_PROBABILITY`` (0.5).
+            Mapping of candidate_name → user belief that item is there (0.0–1.0).
+            Candidates default to ``DEFAULT_PROBABILITY`` (0.5), except for
+            ``last_seen`` which defaults to ``LAST_SEEN_DEFAULT_PROBABILITY`` (0.75).
             Values are clamped to [0.0, 1.0].
+        last_seen : str, optional
+            The location where the item was last observed/remembered by the user.
+            Clarification on role:
+              * ``start`` is where the searcher begins moving.
+              * ``last_seen`` is a high-probability hypothesis location.
+            When provided, ``last_seen`` is automatically ensured in the candidate
+            pool and tagged with ``is_last_seen=True``.
 
         Returns
         -------
@@ -217,25 +232,35 @@ class CandidatePlanner:
         * Unreachable candidates are included with ``reachable=False`` and
           a priority_score of ``math.inf`` so they sort to the bottom.
         """
-        if not candidates:
+        cand_list = list(candidates)
+        if last_seen and last_seen not in cand_list:
+            cand_list.insert(0, last_seen)
+
+        if not cand_list:
             return []
 
         probs = probabilities or {}
         seen: set[str] = set()
         results: list[CandidateResult] = []
 
-        for cand in candidates:
+        for cand in cand_list:
             if cand in seen:
                 continue
             seen.add(cand)
 
-            prob = probs.get(cand, DEFAULT_PROBABILITY)
+            is_last_seen = bool(last_seen and cand == last_seen)
+            default_p = (
+                LAST_SEEN_DEFAULT_PROBABILITY if is_last_seen else DEFAULT_PROBABILITY
+            )
+            prob = probs.get(cand, default_p)
             if not math.isfinite(prob):
                 raise ValueError(
                     f"Probability for '{cand}' must be finite, got {prob!r}."
                 )
             prob = max(0.0, min(1.0, prob))
-            cr = self._evaluate_candidate(start, cand, prob)
+            cr = self._evaluate_candidate(
+                start, cand, prob, is_last_seen=is_last_seen
+            )
             results.append(cr)
 
         # Sort: reachable first by priority_score, unreachable last by name
@@ -375,7 +400,7 @@ class CandidatePlanner:
     # ------------------------------------------------------------------
 
     def _evaluate_candidate(
-        self, start: str, candidate: str, prob: float
+        self, start: str, candidate: str, prob: float, is_last_seen: bool = False
     ) -> CandidateResult:
         """Run pathfinding from start → candidate and build CandidateResult."""
         result = self._run_search(start, candidate)
@@ -402,6 +427,7 @@ class CandidatePlanner:
             probability_weight=prob,
             priority_score=priority_score,
             algorithm_result=result,
+            is_last_seen=is_last_seen,
         )
 
     def _run_search(self, start: str, goal: str) -> SearchResult:

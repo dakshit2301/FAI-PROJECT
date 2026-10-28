@@ -1,0 +1,10 @@
+scenario_name,map_mode,grid_size,obstacle_density,algorithm,trial,start,goal,success,path_cost,path_length,nodes_expanded,nodes_generated,execution_time_ms,memory_peak_kib,heuristic_used
+Tiny-Open,grid,25,0.0,BFS,1,"(0,1)","(4,4)",True,7.0,7,23,25,1.6413000412285328,5.09765625,none
+Tiny-Open,grid,25,0.0,Greedy,1,"(0,1)","(4,4)",True,7.0,7,8,19,1.4813999878242612,4.20703125,manhattan_distance
+Tiny-Open,grid,25,0.0,A*,1,"(0,1)","(4,4)",True,7.0,7,20,25,2.7259000344201922,4.591796875,manhattan_distance
+Small-Light,grid,100,0.1,BFS,1,"(7,1)","(8,1)",True,1.0,1,1,3,0.1368000521324575,1.70703125,none
+Small-Light,grid,100,0.1,Greedy,1,"(7,1)","(8,1)",True,1.0,1,2,5,0.26300002355128527,1.484375,manhattan_distance
+Small-Light,grid,100,0.1,A*,1,"(7,1)","(8,1)",True,1.0,1,2,5,0.2234999556094408,1.234375,manhattan_distance
+Campus-Graph,campus,0,0.0,BFS,1,Corridor-G1,Classroom-102,True,4.5,3,9,15,0.24010002380236983,2.6015625,none
+Campus-Graph,campus,0,0.0,Greedy,1,Corridor-G1,Classroom-102,True,4.5,3,4,10,0.6292000180110335,1.3984375,euclidean_distance
+Campus-Graph,campus,0,0.0,A*,1,Corridor-G1,Classroom-102,True,4.5,3,8,14,0.4610000178217888,2.03125,euclidean_distance

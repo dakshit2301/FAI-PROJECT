@@ -481,3 +481,58 @@ class TestVisitOrderAndRecalculation:
 
         assert len(steps) == 1
         assert steps[0].item_found
+
+    def test_last_seen_automatically_included_in_candidates(
+        self, planner_astar: CandidatePlanner
+    ):
+        """When last_seen is provided but not in candidates, it is added."""
+        results = planner_astar.plan("Hub", ["Far"], last_seen="Near")
+        candidates = [r.candidate for r in results]
+        assert "Near" in candidates
+        assert "Far" in candidates
+
+        near_res = next(r for r in results if r.candidate == "Near")
+        assert near_res.is_last_seen is True
+        assert near_res.probability_weight == 0.75  # Elevated default belief
+
+        far_res = next(r for r in results if r.candidate == "Far")
+        assert far_res.is_last_seen is False
+        assert far_res.probability_weight == 0.50  # Standard default belief
+
+    def test_last_seen_custom_probability_overrides_default(
+        self, planner_astar: CandidatePlanner
+    ):
+        """User explicit belief overrides default 0.75 for last_seen."""
+        results = planner_astar.plan(
+            "Hub", ["Near", "Far"], probabilities={"Near": 0.90}, last_seen="Near"
+        )
+        near_res = next(r for r in results if r.candidate == "Near")
+        assert near_res.is_last_seen is True
+        assert near_res.probability_weight == 0.90
+
+    def test_last_seen_in_summary_dict(
+        self, planner_astar: CandidatePlanner
+    ):
+        results = planner_astar.plan("Hub", ["Near"], last_seen="Near")
+        summary = results[0].summary_dict()
+        assert "is_last_seen" in summary
+        assert summary["is_last_seen"] is True
+
+    def test_unreachable_destination_in_mission_continues(
+        self, planner_astar: CandidatePlanner
+    ):
+        """If one candidate is unreachable, mission notes it and continues to reachable ones."""
+        # Isolated is unreachable in simple_graph
+        order = ["Isolated", "Near", "Far"]
+        steps = planner_astar.execute_mission("Hub", order, actual_location="Far")
+        assert len(steps) == 3
+        assert steps[0].candidate == "Isolated"
+        assert steps[0].algorithm_result.success is False
+        assert steps[0].item_found is False
+        # Next step should continue from current location (Hub, because Isolated was not reached)
+        assert steps[1].candidate == "Near"
+        assert steps[1].from_location == "Hub"
+        assert steps[1].algorithm_result.success is True
+        assert steps[2].candidate == "Far"
+        assert steps[2].item_found is True
+

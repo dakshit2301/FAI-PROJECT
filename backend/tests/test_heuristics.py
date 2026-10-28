@@ -127,3 +127,75 @@ class TestNullHeuristic:
 
     def test_same_node_zero(self, grid_5x5: GridMap):
         assert null_heuristic("(2,2)", "(2,2)", grid_5x5) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Consistency (Monotonicity) Tests
+# ---------------------------------------------------------------------------
+
+class TestHeuristicConsistency:
+    def test_manhattan_is_consistent_on_grid(self, grid_5x5: GridMap):
+        """For every cell u and neighbour v, h(u, g) <= 1 + h(v, g)."""
+        nodes = grid_5x5.all_names()
+        for u in nodes:
+            for v, weight in grid_5x5.get_neighbors_by_name(u):
+                for g in nodes:
+                    h_u = manhattan_distance(u, g, grid_5x5)
+                    h_v = manhattan_distance(v, g, grid_5x5)
+                    assert h_u <= weight + h_v + 1e-9, (
+                        f"Consistency violation: h({u},{g})={h_u} > {weight} + h({v},{g})={h_v}"
+                    )
+
+    def test_euclidean_is_consistent_on_campus(self, campus: CampusGraph):
+        """For every edge (u, v) and goal g, h(u, g) <= weight + h(v, g)."""
+        nodes = campus.node_names()
+        edges = []
+        for edge in campus.all_edges():
+            if not edge.blocked:
+                edges.append((edge.source, edge.target, edge.weight))
+                edges.append((edge.target, edge.source, edge.weight))
+
+        for u, v, weight in edges:
+            for g in nodes:
+                h_u = euclidean_distance(u, g, campus)
+                h_v = euclidean_distance(v, g, campus)
+                assert h_u <= weight + h_v + 1e-9, (
+                    f"Campus consistency violation: h({u},{g})={h_u} > {weight} + h({v},{g})={h_v}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Verification Utility Tests
+# ---------------------------------------------------------------------------
+
+class TestVerificationUtility:
+    def test_verify_euclidean_on_campus(self, campus: CampusGraph):
+        from search.heuristics import verify_heuristic_admissibility_and_consistency
+
+        report = verify_heuristic_admissibility_and_consistency(campus, euclidean_distance)
+        assert report["goal_condition_valid"] is True
+        assert report["admissible"] is True
+        assert report["consistent"] is True
+        assert report["pairs_tested"] > 0
+        assert report["edges_tested"] > 0
+        assert len(report["admissibility_violations"]) == 0
+        assert len(report["consistency_violations"]) == 0
+
+    def test_verify_manhattan_on_grid(self, grid_5x5: GridMap):
+        from search.heuristics import verify_heuristic_admissibility_and_consistency
+
+        report = verify_heuristic_admissibility_and_consistency(grid_5x5, manhattan_distance)
+        assert report["goal_condition_valid"] is True
+        assert report["admissible"] is True
+        assert report["consistent"] is True
+        assert len(report["admissibility_violations"]) == 0
+        assert len(report["consistency_violations"]) == 0
+
+    def test_verify_null_heuristic(self, campus: CampusGraph):
+        from search.heuristics import verify_heuristic_admissibility_and_consistency
+
+        report = verify_heuristic_admissibility_and_consistency(campus, null_heuristic)
+        assert report["goal_condition_valid"] is True
+        assert report["admissible"] is True
+        assert report["consistent"] is True
+

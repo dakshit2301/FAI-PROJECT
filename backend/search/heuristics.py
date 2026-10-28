@@ -34,7 +34,7 @@ Null heuristic
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Callable, Union
 
 if TYPE_CHECKING:
     from environment.graph import CampusGraph
@@ -124,3 +124,159 @@ HEURISTIC_REGISTRY: dict[str, callable] = {
     "euclidean": euclidean_distance,
     "null (Dijkstra mode)": null_heuristic,
 }
+
+
+# ---------------------------------------------------------------------------
+# Admissibility and Consistency Verification
+# ---------------------------------------------------------------------------
+
+def verify_heuristic_admissibility_and_consistency(
+    graph: MapType,
+    heuristic: Callable[[str, str, MapType], float],
+    nodes: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Empirically and mathematically verify whether a heuristic function is
+    admissible and consistent (monotonic) on a given environment.
+
+    Formal Definitions:
+    -------------------
+    1. Goal condition:
+       h(g, g) == 0.0 for all goal states g.
+
+    2. Admissibility:
+       h(n, g) <= h*(n, g) for all nodes n and goals g, where h*(n, g) is the
+       true minimum path cost from n to g. A heuristic that never overestimates
+       the true cost guarantees that A* tree/graph search is cost-optimal.
+
+    3. Consistency (Monotonicity / Triangle Inequality):
+       h(u, g) <= c(u, v) + h(v, g) for all directed edges (u, v) and all goals g.
+       Every consistent heuristic is also admissible (by induction along optimal paths).
+       Consistency guarantees that when A* expands a node, the path found to it is
+       already optimal, eliminating the need to reopen closed nodes.
+
+    Parameters
+    ----------
+    graph : CampusGraph | GridMap
+        The search environment.
+    heuristic : Callable
+        h(node_a, node_b, graph) -> float
+    nodes : list[str], optional
+        List of node names to verify across. If None, all nodes in graph are used.
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary with keys:
+          - "admissible": bool
+          - "consistent": bool
+          - "goal_condition_valid": bool
+          - "pairs_tested": int
+          - "edges_tested": int
+          - "admissibility_violations": list of dicts describing violations
+          - "consistency_violations": list of dicts describing violations
+    """
+    from search.astar import astar
+
+    if nodes is None:
+        if hasattr(graph, "node_names"):
+            nodes = graph.node_names()
+        elif hasattr(graph, "all_names"):
+            nodes = graph.all_names()
+        else:
+            nodes = []
+
+    goal_valid = True
+    admissibility_violations: list[dict[str, Any]] = []
+    consistency_violations: list[dict[str, Any]] = []
+    pairs_tested = 0
+    edges_tested = 0
+
+    # 1. Goal condition check: h(g, g) must be 0
+    for g in nodes:
+        h_gg = heuristic(g, g, graph)
+        if abs(h_gg) > 1e-9:
+            goal_valid = False
+            admissibility_violations.append({
+                "type": "goal_nonzero",
+                "node": g,
+                "h_value": h_gg,
+                "expected": 0.0,
+            })
+
+    # 2. Admissibility check: h(n, g) <= actual shortest path cost h*(n, g)
+    # We compute true shortest path using A* with the null heuristic (Dijkstra)
+    for src in nodes:
+        for dst in nodes:
+            if src == dst:
+                continue
+            h_val = heuristic(src, dst, graph)
+            if h_val < 0:
+                admissibility_violations.append({
+                    "type": "negative_heuristic",
+                    "src": src,
+                    "dst": dst,
+                    "h_value": h_val,
+                })
+            # Compute true shortest path
+            result = astar(graph, src, dst, null_heuristic)
+            if result.success:
+                pairs_tested += 1
+                true_cost = result.path_cost
+                if h_val > true_cost + 1e-9:
+                    admissibility_violations.append({
+                        "type": "overestimation",
+                        "src": src,
+                        "dst": dst,
+                        "h_value": round(h_val, 4),
+                        "true_cost": round(true_cost, 4),
+                        "excess": round(h_val - true_cost, 4),
+                    })
+
+    # 3. Consistency check: h(u, g) <= c(u, v) + h(v, g) for all edges (u, v) and all goals g
+    # Collect all traversable edges
+    edge_list: list[tuple[str, str, float]] = []
+    if hasattr(graph, "all_edges"):
+        for edge in graph.all_edges():
+            if not edge.blocked:
+                edge_list.append((edge.source, edge.target, edge.weight))
+                edge_list.append((edge.target, edge.source, edge.weight))
+    elif hasattr(graph, "get_neighbors_by_name"):
+        for u in nodes:
+            for v, weight in graph.get_neighbors_by_name(u):
+                edge_list.append((u, v, weight))
+    elif hasattr(graph, "get_neighbours_by_name"):
+        for u in nodes:
+            for v, weight in graph.get_neighbours_by_name(u):
+                edge_list.append((u, v, weight))
+
+    for u, v, weight in edge_list:
+        for g in nodes:
+            edges_tested += 1
+            h_u = heuristic(u, g, graph)
+            h_v = heuristic(v, g, graph)
+            if h_u > weight + h_v + 1e-9:
+                consistency_violations.append({
+                    "u": u,
+                    "v": v,
+                    "goal": g,
+                    "weight": round(weight, 4),
+                    "h_u": round(h_u, 4),
+                    "h_v": round(h_v, 4),
+                    "step_cost_plus_h_v": round(weight + h_v, 4),
+                    "violation": round(h_u - (weight + h_v), 4),
+                })
+
+    is_admissible = goal_valid and len(admissibility_violations) == 0
+    is_consistent = len(consistency_violations) == 0
+
+    return {
+        "admissible": is_admissible,
+        "consistent": is_consistent,
+        "goal_condition_valid": goal_valid,
+        "pairs_tested": pairs_tested,
+        "edges_tested": edges_tested,
+        "admissibility_violations": admissibility_violations,
+        "consistency_violations": consistency_violations,
+    }
+

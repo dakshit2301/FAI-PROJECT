@@ -66,24 +66,89 @@ HEURISTICS = {
 }
 
 
+_ACTIVE_CAMPUS_GRAPH: CampusGraph | None = None
+_ACTIVE_MAP_LAYOUT: dict[str, tuple[float, float, str]] = dict(MAP_LAYOUT)
+_SEARCH_HISTORY: list[dict[str, Any]] = []
+
+
 def _run_benchmark_worker(scenarios: list[Any], sender: Any) -> None:
-    """Run benchmark and serialize its results in an isolated child process."""
+    """Run benchmark, save CSVs and charts to disk, and serialize results."""
     try:
-        from benchmark.exporter import summarize
+        from benchmark.exporter import export_csv, summarize
         from benchmark.runner import BenchmarkRunner
+        from visualization.chart_viz import (
+            draw_bar_comparison,
+            draw_scaling_lines,
+            draw_success_rate,
+        )
 
         raw = BenchmarkRunner(verbose=False).run_all(scenarios)
         summary = summarize(raw)
+
+        # Save actual benchmark results to disk
+        out_dir = PROJECT_DIR.parent / "output"
+        evidence_dir = out_dir / "submission_evidence"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+
+        raw_csv_path = export_csv(raw, out_dir / "benchmark_results_raw.csv")
+        summary_csv_path = export_csv(summary, out_dir / "benchmark_summary.csv")
+        export_csv(raw, evidence_dir / "benchmark_results_raw.csv")
+        export_csv(summary, evidence_dir / "benchmark_summary.csv")
+
+        # Generate comparison charts for execution time, expanded nodes, and path cost
+        chart_files: dict[str, str] = {}
+        try:
+            fig_time = draw_bar_comparison(
+                summary, "execution_time_ms", title="Execution Time (ms) - BFS vs Greedy vs A*"
+            )
+            time_file = evidence_dir / "chart_execution_time.png"
+            fig_time.savefig(time_file, dpi=140)
+            chart_files["execution_time"] = time_file.name
+
+            fig_expanded = draw_bar_comparison(
+                summary, "nodes_expanded", title="Nodes Expanded (Search Effort) - BFS vs Greedy vs A*"
+            )
+            expanded_file = evidence_dir / "chart_expanded_nodes.png"
+            fig_expanded.savefig(expanded_file, dpi=140)
+            chart_files["nodes_expanded"] = expanded_file.name
+
+            fig_cost = draw_bar_comparison(
+                summary, "path_cost", title="Path Travel Cost - BFS vs Greedy vs A*"
+            )
+            cost_file = evidence_dir / "chart_path_cost.png"
+            fig_cost.savefig(cost_file, dpi=140)
+            chart_files["path_cost"] = cost_file.name
+
+            fig_succ = draw_success_rate(summary, title="Search Success Rate by Scenario")
+            succ_file = evidence_dir / "chart_success_rate.png"
+            fig_succ.savefig(succ_file, dpi=140)
+            chart_files["success_rate"] = succ_file.name
+
+            if "grid_size" in summary.columns and any(summary["grid_size"] > 0):
+                fig_scale = draw_scaling_lines(
+                    summary, "execution_time_ms", title="Execution Time vs Grid Size"
+                )
+                scale_file = evidence_dir / "chart_scaling.png"
+                fig_scale.savefig(scale_file, dpi=140)
+                chart_files["scaling"] = scale_file.name
+        except Exception:
+            pass
+
         sender.send({
             "scenarios": [scenario.name for scenario in scenarios],
             "summary": summary.astype(object).where(summary.notna(), None).to_dict("records"),
             "raw_csv": raw.to_csv(index=False),
             "summary_csv": summary.to_csv(index=False),
+            "saved_raw_csv": str(raw_csv_path),
+            "saved_summary_csv": str(summary_csv_path),
+            "chart_files": chart_files,
         })
     except Exception as error:
         sender.send({"error": str(error)})
     finally:
         sender.close()
+
 
 
 def _run_benchmarks_with_timeout(scenarios: list[Any]) -> dict[str, Any]:
@@ -178,7 +243,11 @@ def _search_configuration(data: dict[str, Any]) -> tuple[str, Any]:
 def _campus_with_blocks(blocked_edges: list[Any]) -> tuple[CampusGraph, list[list[str]]]:
     if not isinstance(blocked_edges, list):
         raise ValueError("'blocked_edges' must be a list.")
-    graph = build_default_campus()
+    if _ACTIVE_CAMPUS_GRAPH is not None:
+        import copy
+        graph = copy.deepcopy(_ACTIVE_CAMPUS_GRAPH)
+    else:
+        graph = build_default_campus()
     valid_edges: list[list[str]] = []
     for edge in blocked_edges:
         if (
@@ -221,6 +290,7 @@ def _candidate_result(result: CandidateResult) -> dict[str, Any]:
     return {
         "rank": result.rank,
         "candidate": result.candidate,
+        "is_last_seen": getattr(result, "is_last_seen", False),
         "reachable": result.reachable,
         "pathfinding_cost": _finite(result.pathfinding_cost),
         "search_cost": result.search_cost,
@@ -288,10 +358,20 @@ def index():
 
 @app.get("/api/config")
 def get_config():
-    campus = build_default_campus()
+    campus = (
+        _ACTIVE_CAMPUS_GRAPH
+        if _ACTIVE_CAMPUS_GRAPH is not None
+        else build_default_campus()
+    )
     nodes = []
     for node in campus.all_nodes():
-        x, y, floor = MAP_LAYOUT[node.name]
+        layout = _ACTIVE_MAP_LAYOUT.get(node.name)
+        if layout:
+            x, y, floor = layout
+        else:
+            x = float(node.col * 2.0 + 1.0)
+            y = float(node.row * 1.5 + 1.0)
+            floor = "Custom floor" if node.row > 2 else "Ground floor"
         nodes.append({
             "name": node.name,
             "type": node.node_type,
@@ -305,22 +385,141 @@ def get_config():
             "source": edge.source,
             "target": edge.target,
             "weight": edge.weight,
+            "blocked": edge.blocked,
         }
         for edge in campus.all_edges()
     ]
     return jsonify({
-        "locations": location_names(),
+        "locations": campus.node_names(),
         "item_candidates": ITEM_TYPE_CANDIDATES,
         "nodes": nodes,
         "edges": edges,
         "algorithms": ["bfs", "greedy", "astar"],
         "heuristics": ["euclidean", "manhattan", "none"],
+        "is_custom_campus": _ACTIVE_CAMPUS_GRAPH is not None,
     })
 
 
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.post("/api/campus/custom")
+def configure_custom_campus():
+    """Configure or add custom campus locations and corridors."""
+    global _ACTIVE_CAMPUS_GRAPH, _ACTIVE_MAP_LAYOUT
+    data = request.get_json(silent=False)
+    if not isinstance(data, dict):
+        raise ValueError("Request body must be a JSON object.")
+
+    from environment.models import Node
+
+    graph = CampusGraph()
+    layout: dict[str, tuple[float, float, str]] = dict(MAP_LAYOUT)
+
+    nodes_input = data.get("nodes", [])
+    if not isinstance(nodes_input, list) or not nodes_input:
+        raise ValueError("'nodes' must be a non-empty list of campus locations.")
+
+    for n_data in nodes_input:
+        if not isinstance(n_data, dict):
+            raise ValueError("Each node must be an object with name, row, col, node_type, search_cost.")
+        name = _required_text(n_data, "name")
+        row = _bounded_int(n_data, "row", 0, 50)
+        col = _bounded_int(n_data, "col", 0, 50)
+        node_type = str(n_data.get("node_type", "generic"))
+        search_cost = float(n_data.get("search_cost", 1.0))
+        if not 1.0 <= search_cost <= 5.0:
+            raise ValueError(f"Search cost for '{name}' must be between 1.0 and 5.0.")
+
+        graph.add_node(Node(
+            name=name,
+            row=row,
+            col=col,
+            node_type=node_type,
+            search_cost=search_cost,
+        ))
+
+        x = float(n_data.get("x", col * 2.0 + 1.0))
+        y = float(n_data.get("y", row * 1.5 + 1.0))
+        floor = str(n_data.get("floor", "First floor" if row > 2 else "Ground floor"))
+        layout[name] = (x, y, floor)
+
+    edges_input = data.get("edges", [])
+    if not isinstance(edges_input, list):
+        raise ValueError("'edges' must be a list.")
+
+    for e_data in edges_input:
+        if not isinstance(e_data, dict):
+            raise ValueError("Each edge must be an object with source, target, weight.")
+        source = _required_text(e_data, "source")
+        target = _required_text(e_data, "target")
+        weight = float(e_data.get("weight", 1.0))
+        if weight <= 0:
+            raise ValueError(f"Corridor weight between '{source}' and '{target}' must be > 0.")
+        if not graph.has_node(source) or not graph.has_node(target):
+            raise ValueError(f"Corridor connects unknown locations: '{source}' -> '{target}'.")
+        graph.add_edge(source, target, weight=weight)
+        if bool(e_data.get("blocked", False)):
+            graph.block_edge(source, target)
+
+    _ACTIVE_CAMPUS_GRAPH = graph
+    _ACTIVE_MAP_LAYOUT = layout
+    return get_config()
+
+
+@app.post("/api/campus/reset")
+def reset_campus():
+    """Reset the campus graph to the default 20-node campus layout."""
+    global _ACTIVE_CAMPUS_GRAPH, _ACTIVE_MAP_LAYOUT
+    _ACTIVE_CAMPUS_GRAPH = None
+    _ACTIVE_MAP_LAYOUT = dict(MAP_LAYOUT)
+    return get_config()
+
+
+@app.post("/api/campus/verify_heuristic")
+def verify_campus_heuristic():
+    """Empirically test heuristic admissibility and consistency on the campus graph."""
+    campus = (
+        _ACTIVE_CAMPUS_GRAPH
+        if _ACTIVE_CAMPUS_GRAPH is not None
+        else build_default_campus()
+    )
+    from search.heuristics import verify_heuristic_admissibility_and_consistency
+    report = verify_heuristic_admissibility_and_consistency(campus, euclidean_distance)
+    return jsonify(report)
+
+
+@app.get("/api/history")
+def get_search_history():
+    """Retrieve recovery mission and search attempt history."""
+    return jsonify({"history": _SEARCH_HISTORY})
+
+
+@app.post("/api/history")
+def save_search_history():
+    """Record a recovery attempt into server history."""
+    data = request.get_json(silent=False)
+    if isinstance(data, dict):
+        _SEARCH_HISTORY.insert(0, data)
+        if len(_SEARCH_HISTORY) > 50:
+            _SEARCH_HISTORY.pop()
+    return jsonify({"status": "saved", "count": len(_SEARCH_HISTORY)})
+
+
+@app.delete("/api/history")
+def clear_search_history():
+    """Clear recovery mission history."""
+    _SEARCH_HISTORY.clear()
+    return jsonify({"status": "cleared", "count": 0})
+
+
+@app.get("/output/<path:filename>")
+def serve_output(filename: str):
+    """Serve benchmark artifacts, charts, and CSVs from the output directory."""
+    out_dir = PROJECT_DIR.parent / "output"
+    return send_from_directory(str(out_dir), filename)
 
 
 @app.post("/api/search/campus")
@@ -335,18 +534,24 @@ def search_campus():
     candidates = list(dict.fromkeys([*candidates, *visited]))
     if not candidates:
         raise ValueError("Select at least one likely or visited location.")
-    if any(candidate not in location_names() for candidate in candidates):
-        raise ValueError("All candidates must be known campus locations.")
-    if start not in location_names() or last_seen not in location_names():
-        raise ValueError("Start and last-seen locations must be known campus locations.")
-    probabilities = _validate_probabilities(data.get("probabilities"), candidates)
-    algorithm, heuristic = _search_configuration(data)
+    if last_seen and last_seen not in candidates:
+        candidates.insert(0, last_seen)
+
     blocked_input = data.get("blocked_edges", [])
     if not isinstance(blocked_input, list):
         raise ValueError("'blocked_edges' must be a list.")
     campus, blocked_edges = _campus_with_blocks(blocked_input)
+
+    if not campus.has_node(start) or not campus.has_node(last_seen):
+        raise ValueError("Start and last-seen locations must be known campus locations.")
+    if any(not campus.has_node(candidate) for candidate in candidates):
+        raise ValueError("All candidates must be known campus locations.")
+
+    probabilities = _validate_probabilities(data.get("probabilities"), candidates)
+    algorithm, heuristic = _search_configuration(data)
+
     planner = CandidatePlanner(campus, algorithm=algorithm, heuristic=heuristic)
-    results = planner.plan(start, candidates, probabilities)
+    results = planner.plan(start, candidates, probabilities, last_seen=last_seen)
     visit_order = planner.recommended_visit_order(results, start=start)
     mode = data.get("mode", "plan")
     if mode not in ("plan", "mission"):
@@ -379,7 +584,7 @@ def search_campus():
             path = best.path
             explored = best.algorithm_result.explored_nodes
 
-    return jsonify({
+    response_payload = {
         "mode": mode,
         "item_description": str(data.get("item_description", "Item")),
         "start": start,
@@ -394,7 +599,28 @@ def search_campus():
         "explored_nodes": list(dict.fromkeys(explored)),
         "mission": mission,
         "recovered_location": recovered_location,
+    }
+
+    # Record search into history
+    import datetime
+    _SEARCH_HISTORY.insert(0, {
+        "id": f"rec_{int(time.time() * 1000)}",
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "item": str(data.get("item_description", "Item")),
+        "start": start,
+        "last_seen": last_seen,
+        "algorithm": algorithm,
+        "mode": mode,
+        "recovered_location": recovered_location,
+        "tour": [start, *visit_order],
+        "path_cost": selected_search.get("path_cost") if selected_search else None,
+        "execution_time_ms": selected_search.get("execution_time_ms") if selected_search else None,
+        "nodes_expanded": selected_search.get("nodes_expanded") if selected_search else None,
     })
+    if len(_SEARCH_HISTORY) > 50:
+        _SEARCH_HISTORY.pop()
+
+    return jsonify(response_payload)
 
 
 @app.post("/api/compare")
@@ -414,6 +640,7 @@ def compare_algorithms():
             _search_result(astar(campus, start, goal, euclidean_distance)),
         ]
     })
+
 
 
 @app.post("/api/search/grid")
