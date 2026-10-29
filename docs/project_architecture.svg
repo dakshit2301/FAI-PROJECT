@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title description">
+  <title id="title">Lost Item Recovery Agent - Project Architecture</title>
+  <desc id="description">Architecture flow from the user and browser UI through Flask API, campus or grid environment, search algorithms, candidate planner, and visualized results.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#e6fffb"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#064e3b"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1L11 6L1 11Z" fill="#0f766e"/>
+    </marker>
+    <style>
+      .title { font: 700 30px "Segoe UI", Arial, sans-serif; fill: #fff; }
+      .subtitle { font: 400 15px "Segoe UI", Arial, sans-serif; fill: #ccfbf1; }
+      .heading { font: 700 17px "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 14px "Segoe UI", Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px "Segoe UI", Arial, sans-serif; fill: #475569; }
+      .edge-label { font: 600 12px "Segoe UI", Arial, sans-serif; fill: #0f766e; }
+      .card { filter: url(#shadow); }
+      .connector { fill: none; stroke: #0f766e; stroke-width: 3; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 8 7; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" rx="24" fill="url(#background)"/>
+  <path d="M24 0H1256Q1280 0 1280 24V112H0V24Q0 0 24 0Z" fill="url(#header)"/>
+  <text x="54" y="52" class="title">Lost Item Recovery Agent</text>
+  <text x="56" y="82" class="subtitle">System architecture · Foundation of AI search and planning simulation</text>
+
+  <!-- Main flow arrows -->
+  <path class="connector" d="M272 245H326"/>
+  <path class="connector" d="M535 245H589"/>
+  <path class="connector" d="M798 245H852"/>
+  <path class="connector" d="M1061 245H1115"/>
+
+  <!-- User and browser -->
+  <g class="card">
+    <rect x="54" y="166" width="218" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <circle cx="163" cy="205" r="20" fill="#ccfbf1"/>
+    <path d="M153 207a10 10 0 1 1 20 0M147 226c2-9 10-13 16-13s14 4 16 13" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round"/>
+    <text x="163" y="263" class="heading" text-anchor="middle">User</text>
+    <text x="163" y="286" class="body" text-anchor="middle">Start · last seen · candidates</text>
+    <text x="163" y="306" class="body" text-anchor="middle">Beliefs · algorithm · obstacles</text>
+  </g>
+
+  <g class="card">
+    <rect x="326" y="166" width="209" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <rect x="380" y="190" width="101" height="56" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+    <path d="M380 204h101" stroke="#0f766e" stroke-width="2"/>
+    <circle cx="391" cy="197" r="2" fill="#14b8a6"/>
+    <circle cx="399" cy="197" r="2" fill="#14b8a6"/>
+    <path d="M403 258h55m-28-12v12m-18 0h36" stroke="#0f766e" stroke-width="2" stroke-linecap="round"/>
+    <text x="430" y="286" class="heading" text-anchor="middle">Browser UI</text>
+    <text x="430" y="307" class="body" text-anchor="middle">HTML · CSS · JavaScript</text>
+  </g>
+
+  <g class="card">
+    <rect x="589" y="166" width="209" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <path d="M693 187l27 10v19c0 18-12 30-27 37-15-7-27-19-27-37v-19z" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+    <path d="M681 215h24m-12-12v24" stroke="#0f766e" stroke-width="3" stroke-linecap="round"/>
+    <text x="693" y="286" class="heading" text-anchor="middle">Flask API</text>
+    <text x="693" y="307" class="body" text-anchor="middle">Validates · routes · JSON</text>
+  </g>
+
+  <g class="card">
+    <rect x="852" y="166" width="209" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <path d="M887 197h47v31h-47zM945 197h47v31h-47zM916 239h47v31h-47z" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+    <path d="M934 212h11m-34 16v11m58-11v11" stroke="#0f766e" stroke-width="2"/>
+    <text x="956" y="291" class="heading" text-anchor="middle">Environment</text>
+    <text x="956" y="312" class="body" text-anchor="middle">Campus graph or obstacle grid</text>
+  </g>
+
+  <g class="card">
+    <rect x="1115" y="166" width="111" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <path d="M1150 194h41v36h-41z" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+    <path d="M1158 221l9-10 8 6 9-14" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1170" y="268" class="heading" text-anchor="middle">Results</text>
+    <text x="1170" y="289" class="small" text-anchor="middle">Route · map</text>
+    <text x="1170" y="307" class="small" text-anchor="middle">metrics · history</text>
+  </g>
+
+  <text x="298" y="232" class="edge-label" text-anchor="middle">inputs</text>
+  <text x="562" y="232" class="edge-label" text-anchor="middle">JSON</text>
+  <text x="825" y="232" class="edge-label" text-anchor="middle">build / search</text>
+  <text x="1088" y="232" class="edge-label" text-anchor="middle">response</text>
+
+  <!-- Backend modules -->
+  <path class="connector" d="M956 324V375H264V418"/>
+  <path class="connector" d="M956 375H640V418"/>
+  <path class="connector" d="M956 375H1016V418"/>
+  <text x="608" y="364" class="edge-label" text-anchor="middle">Python backend modules</text>
+
+  <g class="card">
+    <rect x="88" y="418" width="352" height="158" rx="18" fill="#fff" stroke="#bae6fd" stroke-width="2"/>
+    <rect x="108" y="438" width="58" height="34" rx="8" fill="#e0f2fe"/>
+    <text x="137" y="461" class="heading" text-anchor="middle">MAP</text>
+    <text x="184" y="461" class="heading">Environment model</text>
+    <text x="112" y="500" class="body">Campus: weighted, undirected locations</text>
+    <text x="112" y="523" class="body">Grid: 4-directional, unit-cost cells</text>
+    <text x="112" y="549" class="small">Blocked edges and obstacles are impassable.</text>
+  </g>
+
+  <g class="card">
+    <rect x="464" y="418" width="352" height="158" rx="18" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+    <rect x="484" y="438" width="58" height="34" rx="8" fill="#ccfbf1"/>
+    <text x="513" y="461" class="heading" text-anchor="middle">AI</text>
+    <text x="560" y="461" class="heading">Search algorithms</text>
+    <text x="488" y="500" class="body">BFS · fewest edges</text>
+    <text x="488" y="523" class="body">Greedy · heuristic h(n)</text>
+    <text x="488" y="546" class="body">A* · actual cost g(n) + estimate h(n)</text>
+  </g>
+
+  <g class="card">
+    <rect x="840" y="418" width="352" height="158" rx="18" fill="#fff" stroke="#fde68a" stroke-width="2"/>
+    <rect x="860" y="438" width="88" height="34" rx="8" fill="#fef3c7"/>
+    <text x="904" y="461" class="heading" text-anchor="middle">PLAN</text>
+    <text x="966" y="461" class="heading">Planning &amp; evaluation</text>
+    <text x="864" y="500" class="body">Rank candidates by cost and user belief</text>
+    <text x="864" y="523" class="body">Recommend a nearest-neighbor visit tour</text>
+    <text x="864" y="546" class="body">Compare algorithms · benchmark trials</text>
+  </g>
+
+  <!-- Feedback/result loop -->
+  <path class="connector dashed" d="M1016 576V622H272V576"/>
+  <text x="644" y="613" class="edge-label" text-anchor="middle">shared graph/grid powers both search and planning</text>
+  <path class="connector" d="M640 576V659H1170V324"/>
+
+  <rect x="185" y="654" width="744" height="62" rx="16" fill="#064e3b"/>
+  <text x="557" y="680" class="heading" text-anchor="middle" fill="#fff" style="fill:#fff">Simulation boundary</text>
+  <text x="557" y="701" class="small" text-anchor="middle" fill="#ccfbf1" style="fill:#ccfbf1">User-supplied beliefs and demo truth · no real sensors or learned predictions</text>
+</svg>
